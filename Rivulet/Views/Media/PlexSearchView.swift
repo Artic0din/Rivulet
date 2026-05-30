@@ -209,7 +209,8 @@ struct PlexSearchView: View {
             groups.append((title: "Episodes & Seasons", items: episodeItems))
         }
 
-        if !musicItems.isEmpty {
+        // Music results only surface while the Music feature is enabled.
+        if FeatureFlags.musicEnabled, !musicItems.isEmpty {
             groups.append((title: "Music", items: musicItems))
         }
 
@@ -218,7 +219,11 @@ struct PlexSearchView: View {
 
     private var filteredResults: [PlexMetadata] {
         let visibleKeys = Set(dataStore.visibleLibraries.map { $0.key })
-        let types = Set(["movie", "show", "season", "episode", "artist", "album", "track"])
+        // Exclude music types while the Music feature is hidden so the result
+        // count and the rendered groups stay consistent.
+        let types: Set<String> = FeatureFlags.musicEnabled
+            ? ["movie", "show", "season", "episode", "artist", "album", "track"]
+            : ["movie", "show", "season", "episode"]
         var seen = Set<String>()
 
         return results.filter { item in

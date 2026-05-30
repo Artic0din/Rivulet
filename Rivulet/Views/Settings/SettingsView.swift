@@ -504,9 +504,21 @@ struct SettingsView: View {
         case .playback:
             playbackSettings
         case .music:
-            musicSettings
+            // Reachable only via the (now gated) Music row; the case stays for
+            // switch exhaustiveness.
+            if FeatureFlags.musicEnabled {
+                musicSettings
+            } else {
+                EmptyView()
+            }
         case .liveTV:
-            liveTVSettings
+            // Reachable only via the (now gated) Live TV row; the case stays for
+            // switch exhaustiveness.
+            if FeatureFlags.liveTVEnabled {
+                liveTVSettings
+            } else {
+                EmptyView()
+            }
         case .servers:
             serversSettings
         case .about:
@@ -581,17 +593,21 @@ struct SettingsView: View {
                 onFocusChange: { if $0 { focusState.focusedSettingId = "cat_playback" } }
             )
 
-            SettingsRow(
-                title: "Music",
-                action: { navigate(to: .music) },
-                onFocusChange: { if $0 { focusState.focusedSettingId = "cat_music" } }
-            )
+            if FeatureFlags.musicEnabled {
+                SettingsRow(
+                    title: "Music",
+                    action: { navigate(to: .music) },
+                    onFocusChange: { if $0 { focusState.focusedSettingId = "cat_music" } }
+                )
+            }
 
-            SettingsRow(
-                title: "Live TV",
-                action: { navigate(to: .liveTV) },
-                onFocusChange: { if $0 { focusState.focusedSettingId = "cat_liveTV" } }
-            )
+            if FeatureFlags.liveTVEnabled {
+                SettingsRow(
+                    title: "Live TV",
+                    action: { navigate(to: .liveTV) },
+                    onFocusChange: { if $0 { focusState.focusedSettingId = "cat_liveTV" } }
+                )
+            }
 
             SettingsRow(
                 title: "Servers",

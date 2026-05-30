@@ -48,6 +48,13 @@ struct SidebarView: View {
         authManager.savedServerName ?? "Plex"
     }
 
+    /// Sidebar libraries honouring the Music feature gate.
+    private var visibleMediaLibraries: [PlexLibrary] {
+        dataStore.visibleMediaLibraries.filter { library in
+            FeatureFlags.musicEnabled || !library.isMusicLibrary
+        }
+    }
+
     var body: some View {
         List(selection: $selectedSection) {
             // MARK: - Plex Section
@@ -59,8 +66,10 @@ struct SidebarView: View {
                     Label("Home", systemImage: "house.fill")
                         .tag(SidebarSection.plexHome)
 
-                    // Dynamic library sections (video and music libraries)
-                    ForEach(dataStore.visibleMediaLibraries, id: \.key) { library in
+                    // Dynamic library sections (video and music libraries).
+                    // Music libraries are dropped while the Music feature is
+                    // off; the SwiftData-backed library list stays intact.
+                    ForEach(visibleMediaLibraries, id: \.key) { library in
                         Label(library.title, systemImage: iconForLibrary(library))
                             .tag(SidebarSection.plexLibrary(key: library.key, title: library.title))
                     }
@@ -80,7 +89,7 @@ struct SidebarView: View {
             }
 
             // MARK: - Live TV Section
-            if hasIPTV {
+            if FeatureFlags.liveTVEnabled && hasIPTV {
                 Section {
                     Label("Channels", systemImage: "tv")
                         .tag(SidebarSection.liveTVChannels)

@@ -71,6 +71,18 @@ struct TVSidebarView: View {
         return dataStore.libraries.first(where: { $0.key == key })?.isMusicLibrary ?? false
     }
 
+    /// Gates the Music Now Playing cover on the Music feature flag. Reads the
+    /// queue's own flag but forces it false (and clears it) while Music is
+    /// hidden, so the overlay can never present even if some path sets it.
+    private var musicNowPlayingBinding: Binding<Bool> {
+        Binding(
+            get: { FeatureFlags.musicEnabled && musicQueue.showNowPlaying },
+            set: { newValue in
+                musicQueue.showNowPlaying = FeatureFlags.musicEnabled ? newValue : false
+            }
+        )
+    }
+
     private var tabSelection: Binding<SidebarTab> {
         Binding(
             get: { selectedTab },
@@ -268,8 +280,10 @@ struct TVSidebarView: View {
             )
             .presentationBackground(.clear)
         }
-        // Music Now Playing overlay
-        .fullScreenCover(isPresented: $musicQueue.showNowPlaying) {
+        // Music Now Playing overlay (only while the Music feature is enabled —
+        // the queue stays wired so playback code keeps compiling, but the UI
+        // surface stays unreachable when hidden).
+        .fullScreenCover(isPresented: musicNowPlayingBinding) {
             MusicNowPlayingView(isPresented: $musicQueue.showNowPlaying)
                 .presentationBackground(.black)
         }
@@ -306,17 +320,17 @@ struct TVSidebarView: View {
             }
 
             if liveTVAboveLibraries {
-                if liveTVDataStore.hasConfiguredSources {
+                if FeatureFlags.liveTVEnabled && liveTVDataStore.hasConfiguredSources {
                     liveTVTabSection
                 }
-                if authManager.hasCredentials && !dataStore.visibleMediaLibraries.isEmpty {
+                if authManager.hasCredentials && !visibleLibraryTabs.isEmpty {
                     libraryTabSection
                 }
             } else {
-                if authManager.hasCredentials && !dataStore.visibleMediaLibraries.isEmpty {
+                if authManager.hasCredentials && !visibleLibraryTabs.isEmpty {
                     libraryTabSection
                 }
-                if liveTVDataStore.hasConfiguredSources {
+                if FeatureFlags.liveTVEnabled && liveTVDataStore.hasConfiguredSources {
                     liveTVTabSection
                 }
             }
@@ -342,9 +356,19 @@ struct TVSidebarView: View {
         }
     }
 
+    /// Sidebar library tabs honouring the Music feature gate. While
+    /// `FeatureFlags.musicEnabled` is off, music libraries are dropped so they
+    /// never surface a hidden feature. The underlying `visibleMediaLibraries`
+    /// (and its SwiftData-backed sources) stay intact.
+    private var visibleLibraryTabs: [PlexLibrary] {
+        dataStore.visibleMediaLibraries.filter { library in
+            FeatureFlags.musicEnabled || !library.isMusicLibrary
+        }
+    }
+
     private var libraryTabSection: some TabContent<SidebarTab> {
         TabSection(authManager.savedServerName ?? "Library") {
-            ForEach(dataStore.visibleMediaLibraries, id: \.key) { library in
+            ForEach(visibleLibraryTabs, id: \.key) { library in
                 Tab(library.title, systemImage: iconForLibrary(library),
                     value: SidebarTab.library(key: library.key)) {
                     tabContent(for: .library(key: library.key))
@@ -404,7 +428,12 @@ struct TVSidebarView: View {
                     DiscoverView()
                 case .library(let key):
                     if let lib = dataStore.libraries.first(where: { $0.key == key }) {
-                        if lib.isMusicLibrary {
+                        // Music libraries only route to MusicHomeView while the
+                        // Music feature is enabled; otherwise the tab is hidden
+                        // upstream (visibleLibraryTabs) and this branch is
+                        // unreachable, but we keep the gate so a stale deep
+                        // link can't reach a hidden surface.
+                        if lib.isMusicLibrary && FeatureFlags.musicEnabled {
                                 MusicHomeView(libraryKey: lib.key, libraryTitle: lib.title)
                                     .id("\(lib.key)-\(musicLibraryEntryToken.uuidString)")
                         } else {
@@ -412,7 +441,13 @@ struct TVSidebarView: View {
                         }
                     }
                 case .liveTV(let sourceId):
-                    LiveTVContainerView(sourceIdFilter: sourceId)
+                    // Live TV is hidden upstream while the feature is off; the
+                    // case stays exhaustive but renders nothing if reached.
+                    if FeatureFlags.liveTVEnabled {
+                        LiveTVContainerView(sourceIdFilter: sourceId)
+                    } else {
+                        Color.clear
+                    }
                 case .settings:
                     SettingsView()
                 }
