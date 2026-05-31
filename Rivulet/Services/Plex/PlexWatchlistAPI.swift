@@ -22,10 +22,39 @@ import os.log
 
 private let watchlistAPILog = Logger(subsystem: "com.rivulet.app", category: "PlexWatchlistAPI")
 
+/// Owned containment boundary for Plex Discover/provider watchlist endpoints.
+///
+/// These endpoints are account-scoped provider APIs, not PMS browse APIs. They
+/// intentionally retain query-token auth until live Plex evidence proves header
+/// auth is accepted for this host family. Failures from this boundary must be
+/// recoverable and must not affect PMS browse, Home, server selection, auth, or
+/// playback paths.
+enum PlexWatchlistProviderBoundary {
+    static let discoverHost = URL(string: "https://discover.provider.plex.tv")!
+    static let metadataHost = URL(string: "https://metadata.provider.plex.tv")!
+    static let retainedQueryTokenRationale = "Discover/provider endpoints are retained as account-token query endpoints pending live Plex fixture evidence."
+
+    static func redacted(_ value: String?) -> String? {
+        guard let value else { return nil }
+        return SensitiveDataRedactor.redact(value) ?? SensitiveDataRedactor.redactedValue
+    }
+
+    static func responseSnippet(from data: Data, limit: Int = 256) -> String? {
+        let raw = String(data: data.prefix(limit), encoding: .utf8)
+        return redacted(raw)
+    }
+}
+
 /// Custom error so the caller can tell why a watchlist request failed.
 struct PlexWatchlistHTTPError: Error, LocalizedError {
     let statusCode: Int
     let bodySnippet: String?
+
+    init(statusCode: Int, bodySnippet: String?) {
+        self.statusCode = statusCode
+        self.bodySnippet = PlexWatchlistProviderBoundary.redacted(bodySnippet)
+    }
+
     var errorDescription: String? {
         if let bodySnippet, !bodySnippet.isEmpty {
             return "HTTP \(statusCode): \(bodySnippet)"
@@ -48,8 +77,8 @@ protocol WatchlistCacheProtocol: Sendable {
 
 final class PlexWatchlistAPI: PlexWatchlistAPIProtocol, Sendable {
     private let session: URLSession
-    private let discoverHost = URL(string: "https://discover.provider.plex.tv")!
-    private let metadataHost = URL(string: "https://metadata.provider.plex.tv")!
+    private let discoverHost = PlexWatchlistProviderBoundary.discoverHost
+    private let metadataHost = PlexWatchlistProviderBoundary.metadataHost
 
     init(session: URLSession = .shared) {
         self.session = session
@@ -79,7 +108,7 @@ final class PlexWatchlistAPI: PlexWatchlistAPIProtocol, Sendable {
             throw URLError(.badServerResponse)
         }
         guard (200...299).contains(http.statusCode) else {
-            let snippet = String(data: data.prefix(256), encoding: .utf8)
+            let snippet = PlexWatchlistProviderBoundary.responseSnippet(from: data)
             watchlistAPILog.error("fetchAll HTTP \(http.statusCode) body=\(snippet ?? "(non-utf8)", privacy: .public)")
             throw PlexWatchlistHTTPError(statusCode: http.statusCode, bodySnippet: snippet)
         }
@@ -163,7 +192,7 @@ final class PlexWatchlistAPI: PlexWatchlistAPIProtocol, Sendable {
             throw URLError(.badServerResponse)
         }
         guard (200...299).contains(http.statusCode) else {
-            let snippet = String(data: data.prefix(256), encoding: .utf8)
+            let snippet = PlexWatchlistProviderBoundary.responseSnippet(from: data)
             watchlistAPILog.error("mutate \(action, privacy: .public) HTTP \(http.statusCode) body=\(snippet ?? "(non-utf8)", privacy: .public)")
             throw PlexWatchlistHTTPError(statusCode: http.statusCode, bodySnippet: snippet)
         }
@@ -208,7 +237,7 @@ final class PlexWatchlistAPI: PlexWatchlistAPIProtocol, Sendable {
             throw URLError(.badServerResponse)
         }
         guard (200...299).contains(http.statusCode) else {
-            let snippet = String(data: data.prefix(256), encoding: .utf8)
+            let snippet = PlexWatchlistProviderBoundary.responseSnippet(from: data)
             throw PlexWatchlistHTTPError(statusCode: http.statusCode, bodySnippet: snippet)
         }
 

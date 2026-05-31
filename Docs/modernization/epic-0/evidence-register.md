@@ -371,6 +371,67 @@ rg -n "setExtra" Rivulet TopShelfExtension --glob '*.swift' | wc -l
 rg -n "print\\(" Rivulet/Services/Plex Rivulet/Services/MediaProvider/Plex TopShelfExtension Rivulet/RivuletApp.swift --glob '*.swift' | wc -l
 ```
 
+## Epic 1 PR 8 Discover and Watchlist Containment Evidence Entries
+
+These records capture the current state for Epic 1 PR 8 only. PR 8 isolates Discover/provider watchlist APIs behind the owned `PlexWatchlistAPI` / `PlexWatchlistProviderBoundary` containment boundary, hardens provider failure redaction, and proves provider failure does not corrupt local watchlist state. PR 8 does not change Home UX, Detail UX, Playback UX, Top Shelf UX, endpoint semantics, token transport strategy outside existing retained query-token containment, server selection behavior, or auth flows.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E1-PR8-AUDIT-001 | Discover/Watchlist | 2026-06-01 | Epic 1 owner | Discover/watchlist flow audit completed | Code review of `PlexWatchlistAPI`, `PlexWatchlistService`, provider endpoint construction, GUID matching, cache behavior, account-token usage, and PR 8 scan command log | Captured | Pending | Current flow is isolated from PMS browse/Home/playback through `PlexWatchlistService` and `PlexWatchlistAPI`. Watchlist uses account token from `PlexAuthManager.shared.authToken`, not selected server token or Home user token. Fetch failure preserves cached state and records `lastFetchError`; add/remove failure reverts optimistic state and exposes a recoverable user-safe message. |
+| E1-PR8-TEST-RED-001 | Testing/TDD | 2026-06-01 | Epic 1 owner | PR 8 containment tests were added before implementation and failed as expected on provider error redaction | Commands `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexWatchlistServiceTests` and `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexWatchlistAPIContainmentTests`; artifacts `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-34-59-+1000.xcresult` and `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-40-52-+1000.xcresult` | Captured | Pending | Expected red result: provider HTTP error body snippets could expose token-bearing provider URLs. A parallel rerun also produced one Xcode build database lock, so all final validation was rerun serially. |
+| E1-PR8-CONTAIN-001 | Discover/Watchlist | 2026-06-01 | Epic 1 owner | Provider containment boundary implemented | Code changes in `Rivulet/Services/Plex/PlexWatchlistAPI.swift` | Captured | Pending | Added `PlexWatchlistProviderBoundary` with owned provider hosts, retained query-token rationale, and shared provider error-body redaction. Provider HTTP errors now sanitize body snippets at construction and before logging. |
+| E1-PR8-SEC-001 | Security/Observability | 2026-06-01 | Epic 1 owner | Provider URL/token diagnostics review completed | PR 8 scan command log and tests `PlexWatchlistServiceTests.testProviderHTTPErrorRedactsTokenBearingBodySnippet`, `PlexWatchlistServiceTests.testWriteFailureSurfacesRecoverableSecretSafeMessage`, and `PlexWatchlistAPIContainmentTests.testProviderHTTPFailureRedactsTokenBearingResponseBody` | Captured | Pending | Watchlist provider request URLs are logged through `SensitiveDataRedactor`. Provider HTTP response body snippets are redacted before logs and before `LocalizedError` descriptions. No watchlist `SentrySDK.capture` or `setExtra` call sites exist in changed paths. |
+| E1-PR8-TEST-001 | Testing/Watchlist Service | 2026-06-01 | Epic 1 owner | Watchlist service targeted test run succeeded after PR 8 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexWatchlistServiceTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-45-26-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 11 tests passed covering fetch success, provider fetch failure with cached state preservation, add/remove success, add/remove provider failure, account-token provider usage, redacted provider errors, GUID matching, and reset behavior. |
+| E1-PR8-TEST-002 | Testing/Provider API Containment | 2026-06-01 | Epic 1 owner | New provider API containment targeted test run succeeded | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexWatchlistAPIContainmentTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-46-05-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 5 tests passed covering retained account query token on Discover fetch, metadata-provider match resolution, add/remove action endpoint construction, no-match recoverable failure, and token-bearing response-body redaction. |
+| E1-PR8-TEST-003 | Testing/Credential Storage | 2026-06-01 | Epic 1 owner | Credential registry targeted test run succeeded after PR 8 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/CredentialRegistryTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-43-29-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 7 credential registry tests passed. |
+| E1-PR8-TEST-004 | Testing/Auth | 2026-06-01 | Epic 1 owner | Plex auth targeted test run succeeded after PR 8 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexAuthManagerTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-44-07-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 18 Plex auth tests passed. |
+| E1-PR8-TEST-005 | Testing/Network URL Contract | 2026-06-01 | Epic 1 owner | Plex network URL targeted test run succeeded after PR 8 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexNetworkManagerURLTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-44-47-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 34 Plex network URL tests passed. PR 8 does not change core PMS URL construction or token transport. |
+| E1-PR8-TEST-006 | Testing/Security | 2026-06-01 | Epic 1 owner | Sensitive data redactor targeted test run succeeded after PR 8 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/SensitiveDataRedactorTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-46-41-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 11 sensitive data redactor tests passed. |
+| E1-PR8-TEST-007 | Testing/Plex Home Identity | 2026-06-01 | Epic 1 owner | Plex Home identity targeted test run succeeded after PR 8 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexHomeIdentityTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-47-15-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 5 Plex Home identity tests passed. PR 8 does not change Plex Home identity behavior. |
+| E1-PR8-TEST-008 | Testing/Multi-Server Selection | 2026-06-01 | Epic 1 owner | Multi-server selection targeted test run succeeded after PR 8 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexServerSelectionPolicyTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-47-51-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 7 multi-server selection tests passed. PR 8 does not change server selection behavior. |
+| E1-PR8-BUILD-001 | Testing/Build | 2026-06-01 | Epic 1 owner | Fresh tvOS simulator build succeeded after PR 8 implementation | Command `xcodebuild -quiet -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' build` | Captured | Pending | Result: exit code 0. Existing unrelated Swift warnings and existing Sentry run-script warning remain. |
+| E1-PR8-BUILD-002 | Testing/Diff Hygiene | 2026-06-01 | Epic 1 owner | Whitespace diff validation succeeded for PR 8 | Command `git diff --check` | Captured | Pending | Result: no output and exit code 0. |
+| E1-PR8-SCAN-001 | Security/Privacy/Observability | 2026-06-01 | Epic 1 owner | PR 8 provider host, endpoint construction, token-query, token-role, Sentry/logging, print, and changed-file token scans completed | PR 8 scan command log | Captured | Pending | Results: provider host usage is limited to `PlexWatchlistAPI` and new containment tests; watchlist fetch/match/action endpoints retain account-token query parameters by explicit containment decision; account-token provider usage is documented and test-covered; no `selectedServerToken` or Home user token usage is present in watchlist service/API changed paths; no Sentry call sites are present in watchlist changed paths; provider diagnostics are redacted; source counts remain 79 `X-Plex-Token` lines across 29 files, 27 `SentrySDK.capture`, 56 `setExtra`, and 96 scoped `print()` lines. Changed-file token scan found fixture values only and no real token, PIN, password, or credential value was introduced. |
+
+### Epic 1 PR 8 Scan Command Log
+
+```bash
+# SCAN-PROVIDER-HOSTS-AND-BOUNDARY
+rg -n "discover\\.provider\\.plex\\.tv|metadata\\.provider\\.plex\\.tv|PlexWatchlistProviderBoundary|retainedQueryTokenRationale" Rivulet/Services/Plex/PlexWatchlistAPI.swift RivuletTests/Unit/PlexWatchlistAPIContainmentTests.swift Docs/modernization/epic-0/security-network-surface-inventory.csv
+
+# SCAN-WATCHLIST-ENDPOINT-CONSTRUCTION
+rg -n "library/sections/watchlist/all|actions/addToWatchlist|actions/removeFromWatchlist|library/metadata/matches|includeGuids|ratingKey" Rivulet/Services/Plex/PlexWatchlistAPI.swift RivuletTests/Unit/PlexWatchlistAPIContainmentTests.swift
+
+# SCAN-PROVIDER-TOKEN-QUERY-CONSTRUCTION
+rg -n "URLQueryItem\\(name: \"X-Plex-Token\"|URLQueryItem\\(name: \"token\"|X-Plex-Token=|queryValue\\(\"X-Plex-Token\"" Rivulet/Services/Plex/PlexWatchlistAPI.swift RivuletTests/Unit/PlexWatchlistAPIContainmentTests.swift
+
+# SCAN-ACCOUNT-SERVER-HOME-TOKEN-USAGE
+rg -n "authToken|selectedServerToken|serverToken|homeUserToken|tokenProvider|PlexAuthManager\\.shared\\.authToken|PlexAuthManager\\.shared\\.selectedServerToken" Rivulet/Services/Plex/PlexWatchlistAPI.swift Rivulet/Services/Plex/PlexWatchlistService.swift RivuletTests/Unit/PlexWatchlistServiceTests.swift RivuletTests/Unit/PlexWatchlistAPIContainmentTests.swift
+
+# SCAN-WATCHLIST-SENTRY-LOGGING
+rg -n "SentrySDK\\.capture|setExtra|breadcrumb|print\\(|Logger\\(|watchlistAPILog|watchlistLog|SensitiveDataRedactor" Rivulet/Services/Plex/PlexWatchlistAPI.swift Rivulet/Services/Plex/PlexWatchlistService.swift RivuletTests/Unit/PlexWatchlistServiceTests.swift RivuletTests/Unit/PlexWatchlistAPIContainmentTests.swift
+
+# SCAN-X-PLEX-TOKEN
+rg -n "X-Plex-Token" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+rg -l "X-Plex-Token" Rivulet TopShelfExtension --glob '*.swift' | sort | wc -l
+
+# SCAN-PROVIDER-HOST-COUNTS
+rg -n "discover\\.provider\\.plex\\.tv" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+rg -n "metadata\\.provider\\.plex\\.tv" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-SENTRY-CAPTURE
+rg -n "SentrySDK\\.capture" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-SETEXTRA
+rg -n "setExtra" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-SCOPED-PRINT
+rg -n "print\\(" Rivulet/Services/Plex Rivulet/Services/MediaProvider/Plex TopShelfExtension Rivulet/RivuletApp.swift --glob '*.swift' | wc -l
+
+# SCAN-CHANGED-FILES-TOKEN-VALUES
+rg -n "(secret-token|account-token|selected-server-token|home-user-token|password|credential|PIN|pin|X-Plex-Token)" Rivulet/Services/Plex/PlexWatchlistAPI.swift Rivulet/Services/Plex/PlexWatchlistService.swift RivuletTests/Unit/PlexWatchlistServiceTests.swift RivuletTests/Unit/PlexWatchlistAPIContainmentTests.swift
+```
+
 ## Baseline Supersession Register
 
 Supersession records are used when a newer verification result replaces an older roadmap assumption, audit note, or evidence item. The replacement does not change the approved roadmap structure; it updates the factual baseline used for execution.
