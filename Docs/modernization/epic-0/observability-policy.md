@@ -116,7 +116,7 @@ Playback failed url=https://server:32400/video/...&X-Plex-Token=abcd1234
 
 ### Current Configuration Baseline
 
-As of Epic 1 PR 2:
+As of Epic 1 PR 3:
 
 - Sentry startup is compiled only for non-Debug builds in `Rivulet/RivuletApp.swift`.
 - The DSN is provided by ignored local file `Rivulet/Config/Secrets.swift` via `Secrets.sentryDSN`.
@@ -125,6 +125,16 @@ As of Epic 1 PR 2:
 - A copied Release DSN could report to an inherited project unless Project Owner confirms Sentry project ownership or explicitly disables Release startup before release validation.
 - PR 2 disables Sentry automatic failed-request capture, automatic network breadcrumbs, and automatic network tracking to avoid SDK-captured raw URL/header leakage.
 - PR 2 adds `beforeSend` sanitization for event tags, extras, contexts, breadcrumbs, exceptions, messages, request URLs, query strings, and request headers.
+- PR 3 privacy baseline declares crash, performance, and other diagnostic data in the main app privacy manifest because Release Sentry can submit diagnostics when a DSN is configured.
+
+### Sentry Privacy Ownership Requirement
+
+Sentry is not production-acceptable solely because a privacy manifest exists. Before release validation or any Epic 1 release-candidate build:
+
+1. Project Owner must confirm that `Secrets.sentryDSN` points to a Rivulet-owned Sentry project, or explicitly disable Release Sentry startup.
+2. Privacy reviewer must confirm that the App Store privacy disclosure matches the enabled Sentry data types.
+3. Observability reviewer must confirm PR 2 redaction and `beforeSend` sanitization still cover changed events, extras, contexts, breadcrumbs, request data, and headers.
+4. Any new Sentry field that can contain Plex tokens, server URLs, media asset URLs, PINs, credentials, profile identifiers, stream URLs, or Top Shelf payload data blocks merge until redacted or removed.
 
 ### Shared Redaction Utility
 

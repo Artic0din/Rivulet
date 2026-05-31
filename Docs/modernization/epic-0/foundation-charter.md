@@ -63,7 +63,7 @@ The current repository state justifies Epic 0 as an always-on stream:
 2. `Rivulet/Services/Plex/PlexWatchlistAPI.swift` places `X-Plex-Token` in query strings and logs request URLs publicly.
 3. `Rivulet/Views/Player/UniversalPlayerViewModel.swift` sends `stream_url` to Sentry extras.
 4. `TopShelfExtension/ContentProvider.swift` passes token-bearing image URLs to Top Shelf.
-5. No `PrivacyInfo.xcprivacy` file exists for the app or extension.
+5. Initial Epic 0 baseline found no `PrivacyInfo.xcprivacy` file for the app or extension; Epic 1 PR 3 adds the baseline manifests and disclosure matrix, while Sentry, Top Shelf, ATS, local-network, and token-transport implementation debt remains tracked separately.
 6. `Rivulet.xcodeproj/project.pbxproj` still sets `SWIFT_VERSION = 5.0` on all build configurations, while the codebase is already carrying Swift 6 migration debt.
 7. Logging is inconsistent and heavily `print()`-driven across networking, playback, auth, and Top Shelf.
 8. The repo has unit-test coverage, but no formalized UI, accessibility, or performance gate package yet.

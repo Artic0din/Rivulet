@@ -88,6 +88,63 @@ These records capture the current state for Epic 1 PR 2 only. PR 2 establishes a
 | E1-PR2-TEST-003 | Testing | 2026-05-31 | Epic 1 owner | Fresh credential registry targeted test run succeeded after PR 2 changes | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/CredentialRegistryTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.05.31_22-35-22-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 5 credential registry test cases passed |
 | E1-PR2-TEST-004 | Testing | 2026-05-31 | Epic 1 owner | Fresh Plex auth/network/watchlist targeted test run succeeded after PR 2 changes | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexAuthManagerTests -only-testing:RivuletTests/PlexNetworkManagerURLTests -only-testing:RivuletTests/PlexWatchlistServiceTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.05.31_22-36-03-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 14 auth, 28 network URL, and 7 watchlist test cases passed |
 
+## Epic 1 PR 3 Privacy Manifest and Plex Data Disclosure Evidence Entries
+
+These records capture the current state for Epic 1 PR 3 only. PR 3 establishes the privacy manifest and disclosure baseline before token transport, endpoint, auth, playback, or Top Shelf runtime changes. These records are not gate-satisfying closure evidence for Epic 1 until reviewed.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E1-PR3-PRIV-001 | Privacy Manifest | 2026-05-31 | Epic 1 owner | App and Top Shelf extension privacy manifests were added and validated as XML property lists | Files `Rivulet/PrivacyInfo.xcprivacy` and `TopShelfExtension/PrivacyInfo.xcprivacy`; command `plutil -lint Rivulet/PrivacyInfo.xcprivacy TopShelfExtension/PrivacyInfo.xcprivacy`; command `find . -name 'PrivacyInfo.xcprivacy' -print`; Xcode project scan of `PBXFileSystemSynchronizedRootGroup` membership | Captured | Pending | Result: both manifests lint `OK`. The main app and Top Shelf extension use file-system-synchronized target groups, so no manual project-file membership edit was required for the new manifest files |
+| E1-PR3-SCAN-001 | Privacy Manifest | 2026-05-31 | Epic 1 owner | Required-reason API scan completed for UserDefaults, file metadata, disk space, system boot time, and active keyboard categories | PR 3 scan command log: `SCAN-USERDEFAULTS`, `SCAN-FILE-METADATA`, `SCAN-BOOT-TIME`, `SCAN-DISK-SPACE` | Captured | Pending | Scan found standard and App Group `UserDefaults`, plus app-container cache file-size metadata access. No disk-space capacity, system boot-time, or active-keyboard API usage was found. Manifests declare UserDefaults reasons `CA92.1` and `1C8F.1`, plus file metadata reason `C617.1` |
+| E1-PR3-MATRIX-001 | Privacy Disclosure | 2026-05-31 | Epic 1 owner | Privacy disclosure matrix was rewritten to cover all Epic 1 PR 3 required Plex, Sentry, Top Shelf, deep-link, NSUserActivity, local-network, media metadata, artwork/cache, search, watchlist, timeline, and playback diagnostic data paths | `Docs/modernization/epic-0/privacy-disclosure-matrix.md` | Captured | Pending | Each row records data item, source, purpose, storage, retention, sink, device egress, user-linkage, sensitivity, privacy manifest impact, App Store disclosure impact, owner, evidence ID, and notes |
+| E1-PR3-SENTRY-001 | Privacy/Observability | 2026-05-31 | Epic 1 owner | Sentry privacy review confirms Debug is disabled, Release depends on ignored `Secrets.sentryDSN`, the tracked template contains only a placeholder, automatic network capture remains disabled, and inherited DSN ownership remains open debt | PR 3 scan command log: `SCAN-SENTRY-CONFIG`; review of `Rivulet/RivuletApp.swift` plus `Rivulet/Config/Secrets.swift.template` | Captured | Pending | No real DSN is committed. Sentry is acceptable for PR 3 baseline only; production acceptability requires Project Owner confirmation of DSN/project ownership or explicit Release disablement |
+| E1-PR3-LOCAL-001 | Privacy/Local Network/ATS | 2026-05-31 | Epic 1 owner | Local network and ATS privacy scan confirms local Plex/Live TV paths, app-wide arbitrary loads, local networking allowance, and custom trust handlers remain implementation debt | PR 3 scan command log: `SCAN-LOCAL-ATS`; command `plutil -p Rivulet/Info.plist` | Captured | Pending | `Rivulet/Info.plist` has `NSAllowsArbitraryLoads = true` and `NSAllowsLocalNetworking = true`; no `NSLocalNetworkUsageDescription` or `NSBonjourServices` key was found. PR 3 documents this and adds debt without changing ATS/trust behavior |
+| E1-PR3-DEEPLINK-001 | Privacy/Deep Links | 2026-05-31 | Epic 1 owner | Deep-link and NSUserActivity privacy review confirms current payloads carry rating keys and titles but not raw Plex tokens | PR 3 scan command log: `SCAN-USER-ACTIVITY`, `SCAN-DEEP-LINKS`; review of `Rivulet/RivuletApp.swift`, `Rivulet/Services/DeepLinkHandler.swift`, `Rivulet/Views/Media/MediaDetailView.swift`, and `Rivulet/Views/Player/UniversalPlayerViewModel.swift` | Captured | Pending | `rivulet://detail` and `rivulet://play` use `ratingKey`; Top Shelf action URLs also include server identifier. No token transport or UX behavior changed in PR 3 |
+| E1-PR3-TOPSHELF-001 | Privacy/Top Shelf | 2026-05-31 | Epic 2 owner | Top Shelf privacy review confirms App Group cache payload includes rating key, title, subtitle, image URL, progress, type, last watched date, and server identifier; token-bearing image URL handoff remains open debt | PR 3 scan command log: `SCAN-TOP-SHELF`; review of `TopShelfExtension/ContentProvider.swift`, `TopShelfExtension/TopShelfCache.swift`, and shared `TopShelfItem` models | Captured | Pending | PR 3 adds an extension privacy manifest and matrix coverage only. It does not redesign Top Shelf or replace the runtime token/image handoff |
+| E1-PR3-SCAN-002 | Privacy/Secrets | 2026-05-31 | Epic 1 owner | Secret and DSN scan confirms no real Sentry DSN or local ignored `Secrets.swift` is committed in tracked PR 3 files | PR 3 scan command log: `SCAN-SECRETS-DSN`; staged-file review before commit | Captured | Pending | Only code references and placeholder template are expected. No real DSN, Plex token, PIN, password, or credential is added by PR 3 |
+| E1-PR3-BUILD-001 | Testing/Build | 2026-05-31 | Epic 1 owner | Whitespace diff validation succeeded after PR 3 manifest and documentation changes | Command `git diff --check` | Captured | Pending | Result: no output and exit code 0 |
+| E1-PR3-BUILD-002 | Testing/Build | 2026-05-31 | Epic 1 owner | Fresh tvOS simulator build succeeded and confirmed privacy manifests are copied into app and extension products | Command `xcodebuild -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' build` | Captured | Pending | Result `** BUILD SUCCEEDED **`; build log shows `CpResource ... TopShelfExtension.appex/PrivacyInfo.xcprivacy` and `CpResource ... Rivulet.app/PrivacyInfo.xcprivacy`, plus app Info.plist `-scanforprivacyfile` for Sentry and Top Shelf extension |
+| E1-PR3-TEST-001 | Testing | 2026-05-31 | Epic 1 owner | Fresh credential registry targeted test run succeeded after PR 3 changes | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/CredentialRegistryTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_03-58-32-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 5 credential registry test cases passed |
+| E1-PR3-TEST-002 | Testing/Security | 2026-05-31 | Epic 1 owner | Fresh sensitive-data redaction test run succeeded after PR 3 changes | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/SensitiveDataRedactorTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_03-59-36-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 11 redaction test cases passed |
+| E1-PR3-TEST-003 | Testing | 2026-05-31 | Epic 1 owner | Fresh Plex auth/network/watchlist targeted test run succeeded after PR 3 changes | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexAuthManagerTests -only-testing:RivuletTests/PlexNetworkManagerURLTests -only-testing:RivuletTests/PlexWatchlistServiceTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_05-40-41-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 14 auth, 28 network URL, and 7 watchlist test cases passed |
+
+### Epic 1 PR 3 Scan Command Log
+
+```bash
+# SCAN-USERDEFAULTS
+rg -n "UserDefaults|@AppStorage|suiteName:" Rivulet TopShelfExtension --glob '*.swift'
+
+# SCAN-FILE-METADATA
+rg -n "attributesOfItem|attributesOfFileSystem|contentModificationDateKey|creationDateKey|fileModificationDate|resourceValues|\\.creationDate|\\.contentModificationDate|\\.modificationDate|stat\\(" Rivulet TopShelfExtension --glob '*.swift'
+
+# SCAN-BOOT-TIME
+rg -n "systemUptime|mach_absolute_time|ProcessInfo\\.processInfo\\.systemUptime|CACurrentMediaTime|boot" Rivulet TopShelfExtension --glob '*.swift'
+
+# SCAN-DISK-SPACE
+rg -n "volumeAvailableCapacity|volumeAvailableCapacityForImportantUsage|volumeAvailableCapacityForOpportunisticUsage|systemFreeSize|attributesOfFileSystem|URLResourceKey\\.volume" Rivulet TopShelfExtension --glob '*.swift'
+
+# SCAN-SENTRY-CONFIG
+rg -n "SentrySDK\\.start|Secrets\\.sentryDSN|sentryDSN|YOUR_SENTRY_DSN_HERE|enableCaptureFailedRequests|enableNetworkBreadcrumbs|enableNetworkTracking|beforeSend|dsn" Rivulet TopShelfExtension Docs Rivulet.xcodeproj/project.pbxproj --glob '!Rivulet/Config/Secrets.swift'
+
+# SCAN-LOCAL-ATS
+rg -n "NSLocalNetworkUsageDescription|NSBonjourServices|NSAllowsLocalNetworking|NSAllowsArbitraryLoads|NSAppTransportSecurity|NSExceptionDomains|serverTrust|didReceive challenge|URLSessionDelegate|Bonjour|NetService|NWBrowser|_plexmediasvr|local network" Rivulet TopShelfExtension Docs/modernization/epic-0/privacy-disclosure-matrix.md
+
+# SCAN-USER-ACTIVITY
+rg -n "NSUserActivity|activityType|eligibleForSearch|targetContentIdentifier|userInfo = \\[\\\"ratingKey\\\"" Rivulet TopShelfExtension
+
+# SCAN-DEEP-LINKS
+rg -n "CFBundleURLTypes|rivulet://|DeepLinkHandler|onOpenURL|URLContexts|openURL|handle\\(url:|queryItems = \\[|URLQueryItem\\(name: \\\"ratingKey\\\"|URLQueryItem\\(name: \\\"server\\\"" Rivulet TopShelfExtension
+
+# SCAN-TOP-SHELF
+rg -n "TopShelf|TVTopShelf|UserDefaults\\(suiteName|group\\.com\\.bain\\.Rivulet|TopShelfCache|imageURL|serverIdentifier|ratingKey|progress|lastWatched|X-Plex-Token" TopShelfExtension Rivulet/Services/Cache/TopShelfCache.swift Rivulet/Models/Shared/TopShelfItem.swift
+
+# SCAN-SECRETS-DSN
+rg -n "https://[A-Za-z0-9]+@[A-Za-z0-9.-]*sentry\\.io|https://.*sentry\\.io|YOUR_SENTRY_DSN_HERE|sentryDSN" Rivulet TopShelfExtension Docs --glob '!Rivulet/Config/Secrets.swift'
+
+# SCAN-TOKEN-BEARING-IMAGE-METADATA
+rg -n "X-Plex-Token.*(thumb|art|image|poster|metadata|library/metadata|library/parts|library/streams)|((thumb|art|imageURL|posterURL|artworkURL).*)X-Plex-Token" Rivulet TopShelfExtension --glob '*.swift'
+```
+
 ## Baseline Supersession Register
 
 Supersession records are used when a newer verification result replaces an older roadmap assumption, audit note, or evidence item. The replacement does not change the approved roadmap structure; it updates the factual baseline used for execution.
