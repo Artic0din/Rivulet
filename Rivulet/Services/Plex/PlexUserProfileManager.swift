@@ -8,10 +8,31 @@
 import Foundation
 import Combine
 
+@MainActor
+protocol PlexHomeAuthManaging: AnyObject {
+    var authToken: String? { get }
+    var selectedServerURL: String? { get }
+
+    func applyHomeUserServerToken(_ token: String, for user: PlexHomeUser) async
+}
+
+protocol PlexHomeProfileNetworkClient: AnyObject {
+    func getHomeUsers(authToken: String) async throws -> [PlexHomeUser]
+    func switchToHomeUser(userUUID: String, pin: String?, authToken: String) async throws -> String?
+    func getServerAccessToken(authToken: String, serverURL: String) async -> String?
+}
+
 /// Manages user profile selection for Plex Home accounts
 @MainActor
 class PlexUserProfileManager: ObservableObject {
-    static let shared = PlexUserProfileManager()
+    static let shared = PlexUserProfileManager(
+        networkClient: PlexNetworkManager.shared,
+        authManager: PlexAuthManager.shared,
+        userDefaults: .standard,
+        profileSwitchHandler: { previousUser, newUser in
+            await PlexUserProfileManager.handleProfileSwitch(previousUser: previousUser, newUser: newUser)
+        }
+    )
 
     // MARK: - Published State
 
@@ -39,15 +60,18 @@ class PlexUserProfileManager: ObservableObject {
 
     // MARK: - UserDefaults Keys
 
-    private let userDefaults = UserDefaults.standard
+    private let userDefaults: UserDefaults
     private let selectedUserIdKey = "selectedPlexUserId"
     private let selectedUserUUIDKey = "selectedPlexUserUUID"
     private let selectedUserNameKey = "selectedPlexUserName"
     private let showProfilePickerOnLaunchKey = "showPlexProfilePickerOnLaunch"
+    private let rememberedPinUUIDsKey = "plexRememberedPinUserUUIDs"
 
     // MARK: - Dependencies
 
-    private let networkManager = PlexNetworkManager.shared
+    private let networkClient: PlexHomeProfileNetworkClient
+    private let authManager: PlexHomeAuthManaging
+    private let profileSwitchHandler: (PlexHomeUser?, PlexHomeUser) async -> Void
 
     // MARK: - Computed Properties
 
@@ -73,7 +97,17 @@ class PlexUserProfileManager: ObservableObject {
 
     // MARK: - Initialization
 
-    private init() {
+    init(
+        networkClient: PlexHomeProfileNetworkClient,
+        authManager: PlexHomeAuthManaging,
+        userDefaults: UserDefaults = .standard,
+        profileSwitchHandler: @escaping (PlexHomeUser?, PlexHomeUser) async -> Void
+    ) {
+        self.networkClient = networkClient
+        self.authManager = authManager
+        self.userDefaults = userDefaults
+        self.profileSwitchHandler = profileSwitchHandler
+
         // Load saved preference for profile picker
         showProfilePickerOnLaunch = userDefaults.bool(forKey: showProfilePickerOnLaunchKey)
 
@@ -85,7 +119,7 @@ class PlexUserProfileManager: ObservableObject {
     /// Fetch all users in the Plex Home
     /// Call this after authentication and on app launch
     func fetchHomeUsers() async {
-        guard let authToken = PlexAuthManager.shared.authToken else {
+        guard let authToken = authManager.authToken else {
             return
         }
 
@@ -93,7 +127,7 @@ class PlexUserProfileManager: ObservableObject {
         usersError = nil
 
         do {
-            let users = try await networkManager.getHomeUsers(authToken: authToken)
+            let users = try await networkClient.getHomeUsers(authToken: authToken)
             homeUsers = users
 
             // Update remembered PINs state for UI
@@ -104,7 +138,7 @@ class PlexUserProfileManager: ObservableObject {
 
             isLoadingUsers = false
         } catch {
-            print("👤 PlexUserProfileManager: Failed to fetch home users: \(error)")
+            print("👤 PlexUserProfileManager: Failed to fetch home users: \(SensitiveDataRedactor.redact(String(describing: error)) ?? "")")
             usersError = "Failed to load profiles"
             isLoadingUsers = false
 
@@ -129,13 +163,13 @@ class PlexUserProfileManager: ObservableObject {
         }
 
         // Call switch endpoint to get user-specific plex.tv token
-        guard let authToken = PlexAuthManager.shared.authToken else {
+        guard let authToken = authManager.authToken else {
             print("👤 PlexUserProfileManager: No auth token available")
             return false
         }
 
         do {
-            let userPlexToken = try await networkManager.switchToHomeUser(
+            let userPlexToken = try await networkClient.switchToHomeUser(
                 userUUID: user.uuid,
                 pin: pin,
                 authToken: authToken
@@ -147,12 +181,12 @@ class PlexUserProfileManager: ObservableObject {
             }
 
             // Now get the server-specific access token using the user's plex.tv token
-            guard let serverURL = PlexAuthManager.shared.selectedServerURL else {
+            guard let serverURL = authManager.selectedServerURL else {
                 print("👤 PlexUserProfileManager: No server URL available")
                 return false
             }
 
-            let serverAccessToken = await networkManager.getServerAccessToken(
+            let serverAccessToken = await networkClient.getServerAccessToken(
                 authToken: userPlexToken,
                 serverURL: serverURL
             )
@@ -162,25 +196,19 @@ class PlexUserProfileManager: ObservableObject {
                 return false
             }
 
-            // Update the server token with the user's server-specific token
-            PlexAuthManager.shared.updateServerToken(serverAccessToken)
+            // Apply the Home user's PMS token without overwriting the account/server base credential.
+            await authManager.applyHomeUserServerToken(serverAccessToken, for: user)
 
             // Update selected user
             let previousUser = selectedUser
             selectedUser = user
             saveSelectedUser(user)
 
-            // Notify data store to reload if user actually changed
-            if let previousUser, previousUser.id != user.id {
-                await PlexDataStore.shared.onProfileSwitched()
-            } else if previousUser == nil {
-                // Initial selection on app launch — sync user-specific settings
-                LibrarySettingsManager.shared.onProfileSwitched()
-            }
+            await profileSwitchHandler(previousUser, user)
 
             return true
         } catch {
-            print("👤 PlexUserProfileManager: ❌ Switch failed: \(error)")
+            print("👤 PlexUserProfileManager: ❌ Switch failed: \(SensitiveDataRedactor.redact(String(describing: error)) ?? "")")
             return false
         }
     }
@@ -188,8 +216,10 @@ class PlexUserProfileManager: ObservableObject {
     /// Reset profile state (call on sign out)
     func reset() {
         // Clear all remembered PINs before clearing homeUsers
-        let userUUIDs = homeUsers.map { $0.uuid }
-        KeychainHelper.deleteAllPins(forUserUUIDs: userUUIDs)
+        let userUUIDs = Set(homeUsers.map { $0.uuid })
+            .union(usersWithRememberedPins)
+            .union(persistedRememberedPinUUIDs)
+        KeychainHelper.deleteAllPins(forUserUUIDs: Array(userUUIDs))
 
         homeUsers = []
         selectedUser = nil
@@ -200,6 +230,7 @@ class PlexUserProfileManager: ObservableObject {
         userDefaults.removeObject(forKey: selectedUserIdKey)
         userDefaults.removeObject(forKey: selectedUserUUIDKey)
         userDefaults.removeObject(forKey: selectedUserNameKey)
+        userDefaults.removeObject(forKey: rememberedPinUUIDsKey)
 
     }
 
@@ -214,12 +245,16 @@ class PlexUserProfileManager: ObservableObject {
     func rememberPin(_ pin: String, for user: PlexHomeUser) {
         KeychainHelper.setPin(pin, forUserUUID: user.uuid)
         usersWithRememberedPins.insert(user.uuid)
+        saveRememberedPinUUIDs(persistedRememberedPinUUIDs.union([user.uuid]))
     }
 
     /// Delete a stored PIN for a user
     func forgetPin(for user: PlexHomeUser) {
         KeychainHelper.deletePin(forUserUUID: user.uuid)
         usersWithRememberedPins.remove(user.uuid)
+        var rememberedPINs = persistedRememberedPinUUIDs
+        rememberedPINs.remove(user.uuid)
+        saveRememberedPinUUIDs(rememberedPINs)
     }
 
     /// Attempt to select a user with their remembered PIN
@@ -245,11 +280,16 @@ class PlexUserProfileManager: ObservableObject {
 
     /// Update the set of users with remembered PINs based on current homeUsers
     private func updateRememberedPinsState() {
-        usersWithRememberedPins = Set(
+        let currentHomeUserPINs = Set(
             homeUsers
                 .filter { KeychainHelper.hasSavedPin(forUserUUID: $0.uuid) }
                 .map { $0.uuid }
         )
+        let persistedPINs = persistedRememberedPinUUIDs.filter {
+            KeychainHelper.hasSavedPin(forUserUUID: $0)
+        }
+        usersWithRememberedPins = currentHomeUserPINs.union(persistedPINs)
+        saveRememberedPinUUIDs(usersWithRememberedPins)
     }
 
     // MARK: - Private Methods
@@ -306,4 +346,23 @@ class PlexUserProfileManager: ObservableObject {
         userDefaults.set(user.uuid, forKey: selectedUserUUIDKey)
         userDefaults.set(user.displayName, forKey: selectedUserNameKey)
     }
+
+    private var persistedRememberedPinUUIDs: Set<String> {
+        Set(userDefaults.stringArray(forKey: rememberedPinUUIDsKey) ?? [])
+    }
+
+    private func saveRememberedPinUUIDs(_ userUUIDs: Set<String>) {
+        userDefaults.set(userUUIDs.sorted(), forKey: rememberedPinUUIDsKey)
+    }
+
+    private static func handleProfileSwitch(previousUser: PlexHomeUser?, newUser: PlexHomeUser) async {
+        if let previousUser, previousUser.id != newUser.id {
+            await PlexDataStore.shared.onProfileSwitched()
+        } else if previousUser == nil {
+            // Initial selection on app launch — sync user-specific settings.
+            LibrarySettingsManager.shared.onProfileSwitched()
+        }
+    }
 }
+
+extension PlexNetworkManager: PlexHomeProfileNetworkClient {}

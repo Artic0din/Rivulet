@@ -253,6 +253,67 @@ rg -n "(thumb|art|image|metadata|poster|Image).*X-Plex-Token|X-Plex-Token.*(thum
 rg -n "test-auth-token|authToken|selectedServerToken|serverToken|homeUserToken|X-Plex-Token|PIN|pin|password|credential" Rivulet/Services/Plex/PlexNetworkManager.swift Rivulet/Services/Plex/PlexRadioService.swift Rivulet/Views/Music/MusicHomeView.swift RivuletTests/Unit/Services/PlexNetworkManagerURLTests.swift
 ```
 
+## Epic 1 PR 6 Plex Home Identity Evidence Entries
+
+These records capture the current state for Epic 1 PR 6 only. PR 6 makes Plex Home identity and user-token ownership explicit without changing playback, Top Shelf, Discover/provider behavior, or broad token transport strategy.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E1-PR6-AUDIT-001 | Authentication/Plex Home Identity | 2026-06-01 | Epic 1 owner | Plex Home identity audit completed for account token, selected server token, Home user switch token, selected profile persistence, remembered PIN storage, logout/reset clearing, and failed-switch state preservation | Code review of `PlexUserProfileManager`, `PlexAuthManager`, `PlexNetworkManager`, `CredentialRegistry`, `KeychainHelper`, and PR 6 scan command log | Captured | Pending | Account token initiates plex.tv Home switch. Home user plex.tv token is used only to resolve the PMS server-user token. The active PMS Home user token is applied to runtime `selectedServerToken` and stored in `CredentialRegistry.serverUser(providerID:userID:)`; the base selected-server credential remains separate. Failed switch paths preserve selected user and prior token state. |
+| E1-PR6-TEST-RED-001 | Testing/TDD | 2026-06-01 | Epic 1 owner | Plex Home identity tests were added before implementation and failed as expected because the identity seams and user-scoped token registration API did not exist | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexHomeIdentityTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_08-40-08-+1000.xcresult` | Captured | Pending | Expected red result: compiler failures for missing `PlexHomeAuthManaging`, `PlexHomeProfileNetworkClient`, injectable `PlexUserProfileManager`, `PlexAuthManager.applyHomeUserServerToken`, and `PlexNetworkManager.buildHomeUserSwitchRequest`. |
+| E1-PR6-IDENTITY-001 | Authentication/Credential Lifecycle | 2026-06-01 | Epic 1 owner | Plex Home identity implementation separates account, selected-server, and Home user server credential responsibilities | Code changes in `Rivulet/Services/Plex/PlexUserProfileManager.swift`, `Rivulet/Services/Plex/PlexAuthManager.swift`, and `Rivulet/Services/Plex/PlexNetworkManager.swift` | Captured | Pending | Profile switching now updates selected profile only after successful switch and PMS token resolution. Home PINs are never persisted automatically; explicit remembered PINs remain Keychain-backed with a non-secret UserDefaults UUID index for cleanup. `switchToHomeUser` no longer falls back to the account token when the response lacks a Home user token. |
+| E1-PR6-PRIV-001 | Privacy/Credential Storage | 2026-06-01 | Epic 1 owner | Privacy disclosure updated for user-scoped PMS Home token storage and remembered PIN UUID index | `Docs/modernization/epic-0/privacy-disclosure-matrix.md`; PR 6 credential storage scan | Captured | Pending | Home user PMS tokens may be stored in Keychain under `server.userToken.<providerID>.<userUUID>`; selected profile metadata and remembered PIN UUID index are non-secret UserDefaults values; PIN values remain Keychain-only. |
+| E1-PR6-TEST-001 | Testing/Plex Home Identity | 2026-06-01 | Epic 1 owner | New Plex Home identity targeted tests succeeded | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexHomeIdentityTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_08-53-00-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 5 tests passed, covering successful switch, protected-user PIN use without automatic persistence, failed switch state preservation, remembered PIN invalidation, and profile reset clearing. A prior rerun failed before execution due to simulator FrontBoard launch error at `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_08-52-03-+1000.xcresult`; immediate retry passed. |
+| E1-PR6-TEST-002 | Testing/Credential Storage | 2026-06-01 | Epic 1 owner | Credential registry targeted test run succeeded after PR 6 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/CredentialRegistryTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_08-46-44-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 7 credential registry tests passed. |
+| E1-PR6-TEST-003 | Testing/Auth | 2026-06-01 | Epic 1 owner | Plex auth targeted test run succeeded after PR 6 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexAuthManagerTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_08-47-34-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; includes `testApplyHomeUserServerTokenRegistersUserScopedCredentialWithoutReplacingBaseServerCredential`. |
+| E1-PR6-TEST-004 | Testing/Network URL Contract | 2026-06-01 | Epic 1 owner | Plex network URL targeted test run succeeded after PR 6 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexNetworkManagerURLTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_08-50-09-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; includes Home switch request tests proving token/PIN are header-carried and absent from query string. |
+| E1-PR6-TEST-005 | Testing/Watchlist | 2026-06-01 | Epic 1 owner | Plex watchlist targeted test run succeeded after PR 6 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexWatchlistServiceTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_08-50-46-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; PR 6 did not change Discover/provider/watchlist behavior. |
+| E1-PR6-TEST-006 | Testing/Security | 2026-06-01 | Epic 1 owner | Sensitive data redactor targeted test run succeeded after PR 6 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/SensitiveDataRedactorTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_08-51-25-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; changed diagnostics continue to use redaction for error/URL text where applicable. |
+| E1-PR6-BUILD-001 | Testing/Build | 2026-06-01 | Epic 1 owner | Fresh tvOS simulator build succeeded after PR 6 implementation | Command `xcodebuild -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' build` | Captured | Pending | Result `** BUILD SUCCEEDED **`; existing unrelated Swift concurrency/deprecation warnings and existing Sentry script output warning remain. |
+| E1-PR6-BUILD-002 | Testing/Diff Hygiene | 2026-06-01 | Epic 1 owner | Whitespace diff validation succeeded for PR 6 | Command `git diff --check` | Captured | Pending | Result: no output and exit code 0. |
+| E1-PR6-SCAN-001 | Security/Privacy/Observability | 2026-06-01 | Epic 1 owner | PR 6 Home identity, selected profile, remembered PIN, Home switch endpoint, token, Sentry, print, credential storage, Keychain, and UserDefaults scans completed | PR 6 scan command log | Captured | Pending | Results: 79 `X-Plex-Token` source lines across 29 files, 43 token query-construction matches, 27 `SentrySDK.capture`, 56 `setExtra`, 96 scoped `print()` lines, and 29 Home identity/switch/storage matches in changed files. Changed-file secret scan found dummy test tokens only. PIN diagnostic scan emits static PIN failure messages/display names but no PIN values. Credential storage scan confirmed Home user PMS token uses `CredentialRegistry.serverUser`, selected profile state and remembered PIN UUID index use UserDefaults, and PIN values use Keychain. |
+
+### Epic 1 PR 6 Scan Command Log
+
+```bash
+# SCAN-HOME-USER-TOKEN-STORAGE
+rg -n "serverUser|applyHomeUserServerToken|homeUser|Home user|selectedServerToken|serverAccessToken" Rivulet/Services/Plex/PlexUserProfileManager.swift Rivulet/Services/Plex/PlexAuthManager.swift Rivulet/Services/MediaProvider/CredentialRegistry.swift
+
+# SCAN-SELECTED-PROFILE-PERSISTENCE
+rg -n "selectedPlexUser|showPlexProfilePickerOnLaunch|selectedUserID|selectedUserUUID|selectedUserTitle|selectedProfile|profileSwitch|PlexUserProfileManager" Rivulet/Services/Plex/PlexUserProfileManager.swift Rivulet/Services/Plex/PlexAuthManager.swift RivuletTests/Unit/Services/PlexHomeIdentityTests.swift
+
+# SCAN-REMEMBERED-PIN-STORAGE
+rg -n "plexPin_|plexRememberedPinUserUUIDs|rememberPin|forgetPin|deleteAllPins|setPin|getPin|hasSavedPin|deletePin|PIN|pin" Rivulet/Services/Plex/PlexUserProfileManager.swift Rivulet/Services/Plex/PlexNetworkManager.swift Rivulet/Services/Security/KeychainHelper.swift RivuletTests/Unit/Services/PlexHomeIdentityTests.swift RivuletTests/Unit/Services/PlexNetworkManagerURLTests.swift
+
+# SCAN-PLEX-HOME-SWITCH-ENDPOINT
+rg -n "switchToHomeUser|/api/v2/home/users|buildHomeUserSwitchRequest|X-Plex-Pin" Rivulet/Services/Plex/PlexUserProfileManager.swift Rivulet/Services/Plex/PlexNetworkManager.swift RivuletTests/Unit/Services/PlexHomeIdentityTests.swift RivuletTests/Unit/Services/PlexNetworkManagerURLTests.swift
+
+# SCAN-CHANGED-FILES-TOKEN-VALUES
+rg -n "home-user-plex-token|home-user-server-token|protected-plex-token|protected-server-token|account-token|selected-server-token|base-server-token|test-auth-token|X-Plex-Token|X-Plex-Pin|PIN|pin|password|credential|authToken|selectedServerToken|serverToken" Rivulet/Services/Plex/PlexUserProfileManager.swift Rivulet/Services/Plex/PlexAuthManager.swift Rivulet/Services/Plex/PlexNetworkManager.swift RivuletTests/Unit/Services/PlexHomeIdentityTests.swift RivuletTests/Unit/Services/PlexAuthManagerTests.swift RivuletTests/Unit/Services/PlexNetworkManagerURLTests.swift
+
+# SCAN-X-PLEX-TOKEN
+rg -n "X-Plex-Token" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+rg -l "X-Plex-Token" Rivulet TopShelfExtension --glob '*.swift' | sort | wc -l
+
+# SCAN-TOKEN-QUERY-CONSTRUCTION
+rg -n "URLQueryItem\\(name: \"X-Plex-Token\"|URLQueryItem\\(name: \"token\"|[?&]X-Plex-Token=|[?&]token=" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-AUTH-PAYLOAD-AND-PIN-LOGGING
+rg -n "print\\(.*(X-Plex-Token|authToken|accessToken|selectedServerToken|serverToken|homeUserToken|pin|PIN|password|credential|uri|URI|url|URL|localizedDescription|String\\(describing: error\\)|error\\))|setExtra\\(.*(token|url|URL|credential|pin)|SentrySDK\\.capture|setExtra\\(|setTag\\(" Rivulet/Services/Plex/PlexUserProfileManager.swift Rivulet/Services/Plex/PlexAuthManager.swift Rivulet/Services/Plex/PlexNetworkManager.swift
+
+# SCAN-SENTRY-CAPTURE
+rg -n "SentrySDK\\.capture" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-SETEXTRA
+rg -n "setExtra" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-SCOPED-PRINT
+rg -n "print\\(" Rivulet/Services/Plex Rivulet/Services/MediaProvider/Plex TopShelfExtension Rivulet/RivuletApp.swift --glob '*.swift' | wc -l
+
+# SCAN-CREDENTIAL-STORAGE-REFERENCES
+rg -n "KeychainHelper\\.(set|get|delete|deleteAllPins|setPin|getPin|hasSavedPin|deletePin)|UserDefaults|userDefaults\\.|selectedPlexUser|showPlexProfilePickerOnLaunch|plexRememberedPinUserUUIDs|CredentialRegistry|CredentialScope|serverUser" Rivulet/Services/Plex/PlexUserProfileManager.swift Rivulet/Services/Plex/PlexAuthManager.swift Rivulet/Services/Plex/PlexNetworkManager.swift Rivulet/Services/MediaProvider/CredentialRegistry.swift Rivulet/Services/Security/KeychainHelper.swift
+```
+
 ## Baseline Supersession Register
 
 Supersession records are used when a newer verification result replaces an older roadmap assumption, audit note, or evidence item. The replacement does not change the approved roadmap structure; it updates the factual baseline used for execution.

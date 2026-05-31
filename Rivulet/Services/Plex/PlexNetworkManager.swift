@@ -204,6 +204,26 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return buildHeaderFirstRequest(url: url, authToken: authToken, method: method)
     }
 
+    /// Build the Plex Home profile switch request using header-carried credentials.
+    func buildHomeUserSwitchRequest(
+        userUUID: String,
+        pin: String?,
+        authToken: String
+    ) throws -> URLRequest {
+        var request = try buildHeaderFirstPlexTVRequest(
+            path: "/api/v2/home/users/\(userUUID)/switch",
+            authToken: authToken,
+            method: "POST"
+        )
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        if let pin, !pin.isEmpty {
+            request.addValue(pin, forHTTPHeaderField: "X-Plex-Pin")
+        }
+
+        return request
+    }
+
     // MARK: - Authentication
 
     /// Request a PIN code for authentication
@@ -2469,7 +2489,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
             print("🌐 PlexNetwork: ❌ Could not decode home users JSON response")
         } catch {
-            print("🌐 PlexNetwork: v2 endpoint failed: \(error)")
+            print("🌐 PlexNetwork: v2 endpoint failed: \(SensitiveDataRedactor.redact(String(describing: error)) ?? "")")
         }
 
         // Fallback: try the XML endpoint and parse it
@@ -2620,10 +2640,11 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             // the user as guest, returning 401 on per-section/streaming
             // endpoints. Returning nil instead lets the caller (selectUser)
             // keep the per-server token that selectServer set up at sign-in.
-            print("🌐 PlexNetwork: ⚠️ No per-server token found for serverURL=\(serverURL); returning nil to preserve existing selectedServerToken")
+            let safeServerURL = SensitiveDataRedactor.redact(serverURL) ?? SensitiveDataRedactor.redactedURLValue
+            print("🌐 PlexNetwork: ⚠️ No per-server token found for serverURL=\(safeServerURL); returning nil to preserve existing selectedServerToken")
             return nil
         } catch {
-            print("🌐 PlexNetwork: ❌ Failed to get server access token: \(error) — returning nil")
+            print("🌐 PlexNetwork: ❌ Failed to get server access token: \(SensitiveDataRedactor.redact(String(describing: error)) ?? "") — returning nil")
             return nil
         }
     }
@@ -2632,23 +2653,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     /// POST https://plex.tv/api/v2/home/users/{uuid}/switch
     /// - Returns: The user's auth token if switch succeeded, nil if PIN invalid
     func switchToHomeUser(userUUID: String, pin: String?, authToken: String) async throws -> String? {
-        guard let url = URL(string: "\(PlexAPI.baseUrl)/api/v2/home/users/\(userUUID)/switch") else {
-            throw PlexAPIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-
-        // Add standard Plex headers
-        for (key, value) in plexHeaders(authToken: authToken) {
-            request.addValue(value, forHTTPHeaderField: key)
-        }
-
-        // Add PIN if provided
-        if let pin = pin, !pin.isEmpty {
-            request.addValue(pin, forHTTPHeaderField: "X-Plex-Pin")
-        }
+        let request = try buildHomeUserSwitchRequest(userUUID: userUUID, pin: pin, authToken: authToken)
 
         let (data, response) = try await session.data(for: request)
 
@@ -2666,7 +2671,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
                let userToken = json["authToken"] as? String {
                 return userToken
             }
-            return authToken // Fall back to original token
+            print("🌐 PlexNetwork: ❌ Plex Home switch response did not include a user token")
+            return nil
         case 401:
             print("🌐 PlexNetwork: ❌ Invalid PIN")
             return nil

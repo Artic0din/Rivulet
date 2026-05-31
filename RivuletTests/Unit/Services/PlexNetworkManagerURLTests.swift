@@ -54,6 +54,35 @@ final class PlexNetworkManagerURLTests: XCTestCase {
         XCTAssertEqual(queryValue(in: request.url, named: "includeHttps"), "1")
     }
 
+    func testBuildHomeUserSwitchRequestUsesHeaderTokenAndPinHeader() throws {
+        let request = try networkManager.buildHomeUserSwitchRequest(
+            userUUID: "managed-user-uuid",
+            pin: "2468",
+            authToken: testAuthToken
+        )
+
+        XCTAssertEqual(request.url?.host, "plex.tv")
+        XCTAssertEqual(request.url?.path, "/api/v2/home/users/managed-user-uuid/switch")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Plex-Token"), testAuthToken)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Plex-Pin"), "2468")
+        XCTAssertNil(queryValue(in: request.url, named: "X-Plex-Token"))
+        XCTAssertNil(queryValue(in: request.url, named: "X-Plex-Pin"))
+        XCTAssertNil(queryValue(in: request.url, named: "token"))
+    }
+
+    func testBuildHomeUserSwitchRequestOmitsEmptyPinHeader() throws {
+        let request = try networkManager.buildHomeUserSwitchRequest(
+            userUUID: "managed-user-uuid",
+            pin: "",
+            authToken: testAuthToken
+        )
+
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Plex-Token"), testAuthToken)
+        XCTAssertNil(request.value(forHTTPHeaderField: "X-Plex-Pin"))
+        XCTAssertNil(queryValue(in: request.url, named: "X-Plex-Token"))
+    }
+
     func testBuildHeaderFirstRequestRemovesTokenLikeQueryItems() throws {
         let request = try networkManager.buildHeaderFirstPMSRequest(
             serverURL: testServerURL,

@@ -643,6 +643,28 @@ class PlexAuthManager: ObservableObject {
         // app fetches Home users again and revalidates the selected profile.
     }
 
+    /// Apply a Plex Home user's server-scoped token without replacing the
+    /// account token or base selected-server credential.
+    func applyHomeUserServerToken(_ token: String, for user: PlexHomeUser) async {
+        selectedServerToken = token
+
+        guard let selectedServer else {
+            print("🔐 PlexAuthManager: No selected server available for Plex Home user credential registration")
+            return
+        }
+
+        let providerID = providerID(for: selectedServer)
+        CredentialRegistry.shared.registerServer(
+            ServerCredential(
+                id: providerID,
+                displayName: selectedServer.name,
+                userID: user.uuid,
+                kind: .plex
+            )
+        )
+        try? await CredentialRegistry.shared.setToken(token, for: .serverUser(providerID: providerID, userID: user.uuid))
+    }
+
     /// Check if currently authenticated (has valid credentials)
     var isAuthenticated: Bool {
         authToken != nil && selectedServerURL != nil
@@ -898,6 +920,8 @@ class PlexAuthManager: ObservableObject {
         }
     }
 }
+
+extension PlexAuthManager: PlexHomeAuthManaging {}
 
 // MARK: - Auth URL Helper
 
