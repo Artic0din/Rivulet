@@ -115,6 +115,32 @@ final class PlexAuthManagerTests: XCTestCase {
         )
     }
 
+    // MARK: - Credential Lifecycle Policy Tests
+
+    func testCredentialLifecyclePolicyInvalidatesOnUnauthorizedResponses() {
+        XCTAssertTrue(PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: PlexAPIError.httpError(statusCode: 401, data: nil)))
+        XCTAssertTrue(PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: PlexAPIError.httpError(statusCode: 403, data: nil)))
+        XCTAssertTrue(PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: PlexAPIError.authenticationFailed))
+    }
+
+    func testCredentialLifecyclePolicyPreservesCredentialsForNonAuthFailures() {
+        XCTAssertFalse(PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: PlexAPIError.httpError(statusCode: 500, data: nil)))
+        XCTAssertFalse(PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: PlexAPIError.notFound))
+        XCTAssertFalse(PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: PlexAPIError.invalidResponse))
+    }
+
+    func testCredentialLifecycleFailureMessageDoesNotExposeSensitiveInputs() {
+        let token = "secret-token-123"
+        let message = PlexCredentialLifecyclePolicy.userFacingInvalidationMessage(
+            role: .account,
+            diagnostic: "HTTP 401 for X-Plex-Token=\(token)"
+        )
+
+        XCTAssertFalse(message.contains(token))
+        XCTAssertFalse(message.contains("X-Plex-Token"))
+        XCTAssertEqual(message, "Your Plex session expired. Please sign in again.")
+    }
+
     // MARK: - Connection Scoring Tests
 
     func testPrefersLocalNonRelayConnections() {

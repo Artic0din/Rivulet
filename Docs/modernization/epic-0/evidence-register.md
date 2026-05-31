@@ -145,6 +145,50 @@ rg -n "https://[A-Za-z0-9]+@[A-Za-z0-9.-]*sentry\\.io|https://.*sentry\\.io|YOUR
 rg -n "X-Plex-Token.*(thumb|art|image|poster|metadata|library/metadata|library/parts|library/streams)|((thumb|art|imageURL|posterURL|artworkURL).*)X-Plex-Token" Rivulet TopShelfExtension --glob '*.swift'
 ```
 
+## Epic 1 PR 4 Authentication and Credential Lifecycle Evidence Entries
+
+These records capture the current state for Epic 1 PR 4 only. PR 4 makes authentication and credential lifecycle behavior explicit and test-covered before token transport migration. These records are not gate-satisfying closure evidence for Epic 1 until reviewed.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E1-PR4-AUDIT-001 | Authentication/Credential Lifecycle | 2026-06-01 | Epic 1 owner | Auth and credential lifecycle audit completed for PIN auth, account token persistence, selected server token persistence, Plex Home credential handling, logout, stale-token handling, server reselection, and legacy token migration | Code review of `Rivulet/Services/Plex/PlexAuthManager.swift`, `Rivulet/Services/MediaProvider/CredentialRegistry.swift`, `Rivulet/Services/Plex/PlexUserProfileManager.swift`, and `Rivulet/Services/Plex/KeychainHelper.swift` | Captured | Pending | Account tokens persist in Keychain key `plexAuthToken`; selected server tokens persist in Keychain key `selectedServerToken` and are now also registered to provider-scoped `CredentialRegistry` server scope. Plex Home server tokens remain session-scoped through `selectedServerToken`; remembered Plex Home PINs persist separately through `PlexUserProfileManager` and are cleared on profile reset/sign-out. Logout clears legacy auth/server keychain tokens, selected profile/PIN state, non-sensitive UserDefaults, registered credential scopes, and Plex data caches. Stale 401/403/authentication failures now invalidate persisted credentials through `PlexCredentialLifecyclePolicy` |
+| E1-PR4-TEST-RED-001 | Testing/TDD | 2026-06-01 | Epic 1 owner | Credential lifecycle tests were added before implementation and failed as expected because lifecycle policy and registry lifecycle APIs did not exist yet | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/CredentialRegistryTests -only-testing:RivuletTests/PlexAuthManagerTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_07-33-42-+1000.xcresult` | Captured | Pending | Expected TDD red result: compiler failures for missing `PlexCredentialLifecyclePolicy`, `registerServerUser`, `clearRegisteredCredentials`, and `serverUserCredentialScopes` |
+| E1-PR4-TEST-001 | Testing/Credential Storage | 2026-06-01 | Epic 1 owner | Credential registry targeted test run succeeded after PR 4 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/CredentialRegistryTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_07-41-28-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 7 credential registry tests passed, including token replacement, distinct account/server/Home-user scopes, and registry-scoped credential clearing |
+| E1-PR4-TEST-002 | Testing/Auth | 2026-06-01 | Epic 1 owner | Plex auth targeted test run succeeded after PR 4 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexAuthManagerTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_07-43-12-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 17 auth tests passed, including credential lifecycle invalidation policy and safe user-facing invalidation message coverage |
+| E1-PR4-TEST-003 | Testing/Network URL Contract | 2026-06-01 | Epic 1 owner | Plex network URL targeted test run succeeded, confirming PR 4 did not change endpoint URL construction behavior | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexNetworkManagerURLTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_07-43-53-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 28 network URL tests passed. Token transport migration remains deferred |
+| E1-PR4-TEST-004 | Testing/Watchlist | 2026-06-01 | Epic 1 owner | Plex watchlist targeted test run succeeded, confirming PR 4 did not change watchlist behavior | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexWatchlistServiceTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_07-44-42-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 7 watchlist service tests passed |
+| E1-PR4-TEST-005 | Testing/Security | 2026-06-01 | Epic 1 owner | Sensitive data redactor targeted test run succeeded after PR 4 changes | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/SensitiveDataRedactorTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_07-45-22-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 11 redaction tests passed. Changed auth diagnostics use the existing redaction utility |
+| E1-PR4-BUILD-001 | Testing/Build | 2026-06-01 | Epic 1 owner | Whitespace diff validation succeeded for PR 4 | Command `git diff --check` | Captured | Pending | Result: no output and exit code 0 |
+| E1-PR4-BUILD-002 | Testing/Build | 2026-06-01 | Epic 1 owner | Fresh tvOS simulator build succeeded after PR 4 credential lifecycle changes | Command `xcodebuild -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' build` | Captured | Pending | Result `** BUILD SUCCEEDED **`; existing unrelated Swift concurrency/deprecation warnings and existing Sentry script output warning remain |
+| E1-PR4-SEC-001 | Security/Redaction | 2026-06-01 | Epic 1 owner | Auth failure redaction and diagnostic review completed for changed auth and credential paths | PR 4 scan command log: `SCAN-CHANGED-SENSITIVE-AUTH`, `SCAN-RAW-DIAGNOSTICS`, and code review of changed `PlexAuthManager` diagnostics | Captured | Pending | Changed URL and error diagnostics use `SensitiveDataRedactor`; invalid-token user-facing message is fixed text and does not include token, header, URL, PIN, credential payload, or raw error string. Sentry capture call sites in changed auth paths attach tags and a fixed redacted URL value only |
+| E1-PR4-SCAN-001 | Security/Observability | 2026-06-01 | Epic 1 owner | PR 4 token, Sentry, print, auth payload, PIN, and credential storage scans completed | PR 4 scan command log: `SCAN-X-PLEX-TOKEN-COUNT`, `SCAN-SENTRY-COUNT`, `SCAN-SETEXTRA-COUNT`, `SCAN-PRINT-COUNT`, `SCAN-CHANGED-SENSITIVE-AUTH`, and `SCAN-CREDENTIAL-STORAGE` | Captured | Pending | Current broad counts: 88 `X-Plex-Token` lines across 29 files, 27 `SentrySDK.capture` call sites, 56 `setExtra` lines, and 94 scoped `print()` lines. The additional scoped print is a static non-secret invalid-credential lifecycle diagnostic. Changed-file scans found expected key names, dummy test tokens, and credential storage references, but no committed real token, PIN, password, or credential value. Token transport and broad print migration remain open debt |
+
+### Epic 1 PR 4 Scan Command Log
+
+```bash
+# SCAN-CHANGED-SENSITIVE-AUTH
+rg -n "auth payload|authPayload|request payload|PIN|pin|password|credential|token" Rivulet/Services/Plex/PlexAuthManager.swift Rivulet/Services/MediaProvider/CredentialRegistry.swift RivuletTests/Unit/CredentialRegistryTests.swift RivuletTests/Unit/Services/PlexAuthManagerTests.swift
+
+# SCAN-RAW-DIAGNOSTICS
+rg -n "print\\(.*(X-Plex-Token|authToken|accessToken|selectedServerToken|serverToken|homeUserToken|pin|PIN|password|credential|uri|URI|url|URL|localizedDescription|String\\(describing: error\\)|error\\))|setExtra\\(.*(token|url|URL|credential|pin)|SentrySDK\\.capture" Rivulet/Services/Plex/PlexAuthManager.swift Rivulet/Services/MediaProvider/CredentialRegistry.swift
+
+# SCAN-CREDENTIAL-STORAGE
+rg -n "plexAuthToken|selectedServerToken|plexHasPersistedSession|selectedPlexUser|server\\.token|server\\.userToken|plex\\.account|KeychainHelper\\.(get|set|delete|deleteAllPins|setPin|getPin|deletePin)|UserDefaults\\.standard" Rivulet/Services/Plex Rivulet/Services/MediaProvider RivuletTests/Unit/CredentialRegistryTests.swift RivuletTests/Unit/Services/PlexAuthManagerTests.swift
+
+# SCAN-X-PLEX-TOKEN-COUNT
+rg -n "X-Plex-Token" Rivulet TopShelfExtension | wc -l
+rg -l "X-Plex-Token" Rivulet TopShelfExtension | sort | wc -l
+
+# SCAN-SENTRY-COUNT
+rg -n "SentrySDK\\.capture" Rivulet TopShelfExtension | wc -l
+
+# SCAN-SETEXTRA-COUNT
+rg -n "setExtra" Rivulet TopShelfExtension | wc -l
+
+# SCAN-PRINT-COUNT
+rg -n "print\\(" Rivulet/Services/Plex Rivulet/Services/MediaProvider/Plex TopShelfExtension Rivulet/RivuletApp.swift | wc -l
+```
+
 ## Baseline Supersession Register
 
 Supersession records are used when a newer verification result replaces an older roadmap assumption, audit note, or evidence item. The replacement does not change the approved roadmap structure; it updates the factual baseline used for execution.
