@@ -17,6 +17,14 @@ This matrix defines the inherited gates for every modernization epic. A gate is 
 | Partially Operational | Gate exists but one or more required evidence paths are still being established |
 | Not Operational | Gate is not yet enforceable; epic work depending on it should not be treated as complete |
 
+## Evidence Enforcement Levels
+
+| Evidence Level | Meaning | Allowed Use |
+| --- | --- | --- |
+| Captured Baseline | Current-state evidence is recorded and linked to a gate, debt item, or known failure | Sufficient to begin Epic 1 when the baseline is complete enough to scope work |
+| Reviewed Work Package Evidence | Evidence is checked by the named reviewer for the changed surface | Required before merging Epic 1 work packages |
+| Gate-Satisfying Closure Evidence | Evidence is reviewed, accepted, and explicitly mapped to an epic close gate | Required before closing Epic 1 or later delivery epics |
+
 ## Cross-Cutting Gates
 
 | Gate ID | Area | Status | Applies To | Rule | Required Evidence | Reviewer | Failure Action |
@@ -29,8 +37,9 @@ This matrix defines the inherited gates for every modernization epic. A gate is 
 | E0-G06 | Testing - Regression Coverage | Partially Operational | Epics 1, 2, 3, 4, 5 | User-visible regressions must be covered by unit, integration, UI, or manual regression evidence appropriate to the change | Updated regression matrix entry, test results | Epic reviewer + domain reviewer | Merge blocked if regression risk is high |
 | E0-G07 | Performance - Budget Adherence | Operational | Epics 2, 3, 4, 5 | Changes to launch, home, preview, or playback must not exceed published budgets without explicit debt acceptance | Performance run record, before/after metric comparison | Performance reviewer | Merge blocked for unexplained breaches |
 | E0-G08 | Observability - Logging Policy | Operational | Epics 1, 2, 3, 4, 5 | New logs, events, breadcrumbs, or crash fields must use approved taxonomy and must not emit forbidden fields | Observability review record | Observability reviewer | Merge blocked |
-| E0-G09 | ADR Governance | Operational | Epics 0, 1, 2, 3, 4 | Architectural changes touching auth, endpoints, trust, playback policy, observability, or accessibility standard require ADR review | ADR update or ADR exemption note | Project Owner | Merge blocked |
-| E0-G10 | Documentation and Evidence Linking | Operational | Epics 1, 2, 3, 4, 5 | Every completed work package must link its evidence in the evidence register | Evidence register update | Epic reviewer | Cannot close epic work package |
+| E0-G09 | ADR Governance | Operational | Epics 0, 1, 2, 3, 4, 5 | Architectural changes touching auth, endpoints, trust, playback policy, observability, accessibility standard, release exceptions, or risk acceptance require ADR review | ADR update or ADR exemption note | Project Owner | Merge blocked |
+| E0-G10 | Documentation and Evidence Linking | Operational | Epics 1, 2, 3, 4, 5 | Every completed work package must link its evidence in the evidence register and document dependency assumptions and known limitations | Evidence register update, dependency note, known-limitation note | Epic reviewer | Cannot close epic work package |
+| E0-G11 | UAT Coverage | Operational | Epics 1, 2, 3, 4, 5 | User-acceptance flows affected by the change must be validated or explicitly marked out of scope | UAT matrix entry and UAT record | Epic reviewer + domain reviewer | Cannot close work package |
 
 ## Epic-Specific Gate Application
 
@@ -43,6 +52,27 @@ This matrix defines the inherited gates for every modernization epic. A gate is 
 | E0-G03 | Epic 1 changes the handling of account/server/user credentials | Disclosure matrix updates for credentials, identifiers, and crash fields |
 | E0-G05 | Auth and endpoint changes are high-risk regression surfaces | Command output for unit tests and targeted auth/network tests |
 | E0-G08 | Epic 1 is responsible for bringing logs and Sentry fields under policy | Before/after log examples and scrubber verification |
+| E0-G10 | Epic 1 must record dependency assumptions and known limitations for Plex auth, server selection, Plex Home, watchlist/discover, and endpoint containment | Dependency note, known-limitation note, debt or known-failure linkage |
+| E0-G11 | Epic 1 changes core user-acceptance flows for auth, server selection, Plex Home, watchlist/discover, deep links, and failure states | UAT matrix entries and UAT records |
+
+### Epic 1 Start and Close Evidence
+
+Epic 1 may begin when the following are present:
+
+- accepted Epic 0 ADR set
+- captured baseline evidence for security, privacy, testing, observability, and build state
+- endpoint inventory entries for known Plex and supporting network surfaces
+- UAT entries for Epic 1 flows
+- known-failure and inherited implementation blocker entries for unresolved platform debt
+
+Epic 1 may close only when the following are reviewed and accepted:
+
+- token transport and redaction evidence
+- endpoint classification and ownership evidence
+- adapter containment evidence for unstable and legacy endpoints
+- privacy disclosure and manifest evidence for changed data flows
+- auth/network test evidence and UAT evidence
+- observability evidence proving forbidden fields are absent from changed sinks
 
 ### Epic 2 - Apple TV Home Experience
 
@@ -73,7 +103,8 @@ This matrix defines the inherited gates for every modernization epic. A gate is 
 
 | Gate | Why it applies | Additional proof required |
 | --- | --- | --- |
-| E0-G01 through E0-G10 | Epic 5 is the formal audit and release gate | Full evidence register, parity scorecard review, debt register review, explicit ship/no-ship recommendation |
+| E0-G01 through E0-G11 | Epic 5 is the formal audit and release gate | Full evidence register, parity scorecard review, debt register review, UAT review, explicit ship/no-ship recommendation |
+| E0-G09 | Epic 5 can introduce release-time architecture exceptions or risk-acceptance decisions | ADR update or ADR exemption note for each release exception or risk acceptance |
 
 ## Review Rules
 
@@ -81,6 +112,8 @@ This matrix defines the inherited gates for every modernization epic. A gate is 
 2. A reviewer may not waive a blocker verbally; waivers must be written in the relevant artifact or linked debt register entry.
 3. A partially operational gate may support active development, but it may not be used as justification to close an epic.
 4. If multiple gates fail, the highest-severity failure controls the decision.
+5. Captured baseline evidence can start an epic but cannot close an epic.
+6. Gate-satisfying closure evidence must be reviewed and explicitly mapped to the relevant gate.
 
 ## Escalation Rules
 
@@ -99,5 +132,9 @@ The following checklist must be true before any epic work package is accepted:
 - [ ] Applicable Epic 0 gates identified
 - [ ] Evidence linked in `evidence-register.md`
 - [ ] Reviewer names recorded
+- [ ] Epic 1 security, privacy, testing, and observability reviewers identified when applicable
 - [ ] Any accepted debt recorded with owner and expiry
 - [ ] No blocker gate remains open
+- [ ] Dependency assumptions documented
+- [ ] Known limitations documented or linked to the known-failure register
+- [ ] UAT impact reviewed and evidence attached where applicable

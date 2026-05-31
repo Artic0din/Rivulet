@@ -36,6 +36,12 @@ Current baseline:
 - Result: `** TEST SUCCEEDED **`
 - Notes: credential-storage tests are not currently red in this tree
 
+Baseline supersession:
+
+- Supersedes the older roadmap assumption that credential-storage tests were failing.
+- Replacement evidence is `E0-TEST-002` in `Docs/modernization/epic-0/evidence-register.md`.
+- Any Epic 1 change touching credential storage, keychain behavior, account tokens, server tokens, Plex Home user tokens, or PIN handling must re-run this command and attach reviewed evidence.
+
 ### Core Unit Test Suite
 
 ```bash
@@ -137,12 +143,18 @@ Example:
 | --- | --- |
 | Docs-only Epic 0 updates | Consistency review plus any commands explicitly cited |
 | Auth/network/token changes | Build + targeted Plex auth/network tests |
+| Credential storage or token persistence changes | Build + targeted credential registry verification + targeted Plex auth/network tests |
 | Home/preview/detail changes | Build + relevant unit tests + manual regression pack |
 | Playback changes | Build + targeted playback tests + media validation corpus run |
 | Release gate validation | Full unit suite + full manual regression pack + accessibility and performance evidence |
+
+## UAT Requirements
+
+Epic 1 auth, server-selection, Plex Home, watchlist/discover, deep-link, and failure-state changes must also provide UAT evidence using the UAT matrix in `Docs/modernization/epic-0/regression-matrix.md`.
 
 ## Escalation
 
 - If a required test command fails, the work package is not complete.
 - If the required automated lane does not exist, the owning epic must provide manual evidence and record the automation gap as debt.
 - If a prior assumption is invalidated by a fresh command, the fresh result wins immediately.
+- If a command supersedes an older baseline assumption, the evidence register must record the supersession and replacement evidence ID.

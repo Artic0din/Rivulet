@@ -43,6 +43,24 @@ This document defines the performance metrics, budgets, capture rules, and basel
 | PERF-010 | `<= 100ms` | Cached poster/hub art target |
 | PERF-011 | No unbounded growth | Extended session must not show persistent growth without release |
 
+## Measurement Protocol
+
+Each performance run must use the same calculation model unless a work package records an explicit exception.
+
+| Metric ID | Measurement Method | Sample Size | Median / P95 Calculation | Tooling | Pass / Fail Interpretation |
+| --- | --- | --- | --- | --- | --- |
+| PERF-001 | Mark process launch and first visually usable home shell | Minimum 5 cold launches | Sort run durations; median is middle value, p95 is nearest-rank ceiling of `0.95 * n` | `os_signpost`, unified logging timestamps, Xcode Organizer or Instruments where available | Pass when median and p95 are within budget; fail when either exceeds budget without accepted debt |
+| PERF-002 | Mark warm relaunch request and first visually usable home shell | Minimum 5 warm launches | Same nearest-rank method | `os_signpost`, unified logging timestamps | Pass when median and p95 are within budget |
+| PERF-003 | Mark home shell visible and hero artwork/title/action ready | Minimum 5 home loads across representative account state | Same nearest-rank method | `os_signpost`, screen recording timestamp review when signposts are absent | Fail when hero readiness exceeds budget or visibly lags enough to affect first impression |
+| PERF-004 | Mark poster focus event and first visible preview expansion frame | Minimum 10 focus events across at least 5 items | Median and p95 across all focus events | `os_signpost`, high-frame-rate screen recording when needed | Fail when p95 exceeds budget or motion is visibly delayed |
+| PERF-005 | Mark poster focus event and stable preview metadata/artwork state | Minimum 10 focus events across at least 5 items | Median and p95 across all focus events | `os_signpost`, screen recording timestamp review | Fail when preview settles above budget or content appears in unstable stages |
+| PERF-006 | Mark play action and first stable frame/audio on AVPlayer direct routes | Minimum 3 runs per relevant media corpus sample | Median and p95 per sample class, then worst-class result controls | `os_signpost`, player state logs, media corpus IDs | Fail when any representative direct-play class exceeds budget without route-specific justification |
+| PERF-007 | Mark play action and first stable frame/audio on remux or HLS routes | Minimum 3 runs per relevant media corpus sample | Median and p95 per sample class, then worst-class result controls | `os_signpost`, player state logs, media corpus IDs | Fail when any remux/HLS route exceeds budget without accepted debt |
+| PERF-008 | Mark seek command and stable resumed playback | Minimum 5 seeks per tested route | Median and p95 per route | Player state logs, `os_signpost`, screen recording when needed | Fail for local seeks above budget; network-dependent failures require investigation and evidence |
+| PERF-009 | Mark remote/navigation input and updated focus state | Minimum 20 focus moves across changed surface | Median and p95 across moves | Focus logs, tvOS simulator/device recording, Instruments if needed | Fail when p95 exceeds budget or visible focus lag occurs |
+| PERF-010 | Mark cached artwork request and rendered image | Minimum 20 cached image requests | Median and p95 across cached requests | Image cache logs, `os_signpost` around cache lookup/render | Fail when cached presentation exceeds budget or cache misses are misclassified as hits |
+| PERF-011 | Measure memory before browse session, before playback, after playback, and after exit/settle | One 30-minute run per affected browse/playback path, repeated if a regression is suspected | Track peak, final settled memory, and delta; p95 is not required for single soak runs | Instruments Allocations/Leaks, Xcode memory graph, OS memory logs | Fail when memory grows without release after settle, leaks are observed, or user-visible degradation appears |
+
 ## Current Baseline Status
 
 As of 2026-05-31, Rivulet does not yet have a structured Epic 0 performance evidence pack. The current baseline is therefore a combination of known risks and required first captures:
@@ -123,4 +141,5 @@ This document is acceptable when:
 1. Metrics and budgets are defined for launch, home, preview, focus, playback, cache, and memory.
 2. Capture requirements are explicit and reusable.
 3. The absence of formal measurements is recorded honestly as a current baseline fact.
-4. Reviewers can use the budgets to accept or reject work.
+4. Measurement method, sample size, median/p95 calculation, tooling, and pass/fail interpretation are defined for every metric.
+5. Reviewers can use the budgets to accept or reject work.

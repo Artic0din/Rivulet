@@ -17,10 +17,23 @@ Every evidence item must have:
 
 | Status | Meaning |
 | --- | --- |
-| Captured | Evidence exists and is linked |
-| Reviewed | Evidence has been checked by the relevant reviewer |
-| Superseded | Evidence is outdated and replaced by a newer item |
+| Captured | Evidence exists and is linked. Captured baseline evidence can support starting Epic 1 when it describes current state and is linked to a gate, debt item, or known failure |
+| Reviewed | Evidence has been checked by the relevant reviewer and may satisfy merge-level review requirements for the affected work package |
+| Gate Satisfying | Evidence is reviewed, linked to the applicable gate, and explicitly accepted as sufficient for epic closure |
+| Superseded | Evidence or an older finding is outdated and replaced by a newer item |
 | Missing | Required evidence has not yet been captured |
+
+## Baseline Evidence Rules
+
+Baseline evidence is used to establish the starting state of the modernization program. It is not the same as gate-satisfying evidence for a delivery epic.
+
+| Evidence Use | Minimum Status | Reviewer Requirement | Applies To |
+| --- | --- | --- | --- |
+| Begin Epic 1 | Captured | Project Owner or delegated Epic 0 steward confirms the baseline is linked to a gate, debt item, known failure, or work package | Existing security, privacy, observability, testing, build, endpoint, and UAT baselines |
+| Merge an Epic 1 work package | Reviewed | Named security, privacy, testing, and observability reviewers as applicable to the changed surface | Auth, server selection, Plex Home, watchlist/discover, endpoint classification, logging, and privacy changes |
+| Close Epic 1 | Gate Satisfying | Project Owner plus applicable domain reviewers accept the evidence against the Epic 1 gates | Token transport, endpoint ownership, adapter containment, privacy, regression, UAT, and observability evidence |
+
+Baseline evidence may remain `Captured` while Epic 1 begins. It must not be used to close Epic 1 unless it is reviewed and promoted to `Gate Satisfying`, or replaced by newer gate-satisfying evidence.
 
 ## Baseline Evidence Entries
 
@@ -41,6 +54,14 @@ Every evidence item must have:
 | E0-BUILD-003 | Testing/Build | 2026-05-31 | Project Owner | Fresh tvOS simulator build succeeded | Command `xcodebuild -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' build` | Captured | Pending | Confirms the repo builds while Epic 0 docs are being established |
 | E0-TEST-002 | Testing | 2026-05-31 | Project Owner | Fresh targeted credential-storage test run succeeded; xcresult recorded | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/CredentialRegistryTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.05.31_19-13-51-+1000.xcresult` | Captured | Pending | Fresh verification artifact satisfying Epic 0 testing-baseline evidence requirement |
 
+## Baseline Supersession Register
+
+Supersession records are used when a newer verification result replaces an older roadmap assumption, audit note, or evidence item. The replacement does not change the approved roadmap structure; it updates the factual baseline used for execution.
+
+| Supersession ID | Superseded Finding | Replacement Evidence | Current Baseline | Review Expectation | Owner |
+| --- | --- | --- | --- | --- | --- |
+| SUP-E0-001 | Approved roadmap baseline stated that credential-storage tests were failing | `E0-TEST-002` targeted credential-storage test run succeeded and recorded an `.xcresult` artifact | Credential-storage tests are not a current red baseline as of 2026-05-31 | Re-run targeted credential tests for any Epic 1 change touching credential storage, keychain behavior, account/server token handling, or Plex Home user credentials | Epic 1 owner |
+
 ## Required Evidence Categories
 
 | Category | Minimum requirement | Owner |
@@ -60,6 +81,8 @@ Every evidence item must have:
 ## Security Audit Record
 
 - Evidence ID:
+- Gate ID:
+- Debt ID:
 - Date:
 - Owner:
 - Reviewer:
@@ -78,6 +101,8 @@ Every evidence item must have:
 ## Privacy Disclosure Record
 
 - Evidence ID:
+- Gate ID:
+- Debt ID:
 - Date:
 - Owner:
 - Reviewer:
@@ -97,6 +122,8 @@ Every evidence item must have:
 ## Accessibility Validation Record
 
 - Evidence ID:
+- Gate ID:
+- Flow ID:
 - Date:
 - Owner:
 - Reviewer:
@@ -115,6 +142,8 @@ Every evidence item must have:
 ## Test Execution Record
 
 - Evidence ID:
+- Gate ID:
+- Regression or UAT ID:
 - Date:
 - Owner:
 - Command:
@@ -131,6 +160,8 @@ Every evidence item must have:
 ## Performance Run Record
 
 - Evidence ID:
+- Gate ID:
+- Metric ID:
 - Date:
 - Owner:
 - Reviewer:
@@ -151,6 +182,8 @@ Every evidence item must have:
 ## Observability Review Record
 
 - Evidence ID:
+- Gate ID:
+- Debt ID:
 - Date:
 - Owner:
 - Reviewer:
@@ -162,12 +195,36 @@ Every evidence item must have:
 - Follow-up:
 ```
 
+### Epic Closure Evidence Record
+
+```markdown
+## Epic Closure Evidence Record
+
+- Epic:
+- Date:
+- Owner:
+- Reviewers:
+- Gate IDs satisfied:
+- Regression evidence:
+- UAT evidence:
+- Security/privacy evidence:
+- Performance evidence:
+- Accessibility evidence:
+- Observability evidence:
+- Dependency assumptions:
+- Known limitations:
+- Open debt accepted:
+- Final decision:
+```
+
 ## Review Requirements
 
 1. Every reviewed evidence item must record the reviewer name or role.
 2. Evidence without a reviewer may support active investigation but does not satisfy a gate.
 3. Superseded evidence must point to the replacement item.
 4. If evidence cannot be captured, the owning epic must record why and request a written exception.
+5. Epic 1 evidence must identify the applicable security, privacy, testing, and observability reviewers before merge.
+6. Gate-satisfying evidence must cite the gate ID it satisfies and the debt or known-failure ID it resolves when applicable.
 
 ## Escalation Rules
 

@@ -89,6 +89,39 @@ This matrix defines the must-not-regress product flows for the Rivulet moderniza
 
 - Full matrix
 
+## UAT Matrix
+
+The UAT matrix lives in this document because UAT is the user-acceptance layer of regression governance. Keeping it here prevents duplicate flow ownership and lets reviewers evaluate automated tests, manual regression, and user acceptance from one source.
+
+| UAT ID | Flow | User Acceptance Objective | Required Evidence | Owning Epic | Reviewer | Blocks |
+| --- | --- | --- | --- | --- | --- | --- |
+| UAT-E1-001 | Plex PIN authentication | A user can authenticate without token leakage, confusing failure states, or credential-storage regression | Auth test record, security/privacy review, manual success/failure notes | Epic 1 | Security, privacy, testing, observability reviewers | Epic 1 close |
+| UAT-E1-002 | Server discovery and selection | A user can select the intended server across local/remote availability without exposing connection secrets in logs | Targeted network test record, manual server-selection notes, sanitized log evidence | Epic 1 | Security, privacy, testing, observability reviewers | Epic 1 close |
+| UAT-E1-003 | Plex Home user switching | A user can switch profiles, including PIN-protected flows, with correct credential scope and watch-state identity | Manual profile-switch evidence, credential test evidence if storage changes, privacy review | Epic 1 | Security, privacy, testing reviewers | Epic 1 close |
+| UAT-E1-004 | Watchlist and discover actions | A user can add/remove/query watchlist items through contained discover/provider surfaces with graceful failure | Targeted watchlist tests, endpoint classification evidence, sanitized log evidence | Epic 1 | Security, testing, observability reviewers | Epic 1 close |
+| UAT-E1-005 | Deep-link and restored entry after platform changes | Existing play/detail restoration still lands on the intended item without token-bearing activity payloads | Deep-link targeted tests, privacy review, manual entry note | Epic 1 | Privacy and testing reviewers | Epic 1 close |
+| UAT-E1-006 | Auth/network failure states | Authentication, server, and discover failures produce understandable user-visible outcomes and safe diagnostics | Manual failure-state notes, observability review, screenshot or video when UI changes | Epic 1 | Security, privacy, testing, observability reviewers | Epic 1 close |
+
+## UAT Evidence Template
+
+```markdown
+## UAT Record
+
+- UAT ID:
+- Date:
+- Build:
+- Device:
+- Owner:
+- Reviewers:
+- User acceptance objective:
+- Steps executed:
+- Result:
+- Evidence links:
+- Dependency assumptions:
+- Known limitations:
+- Decision:
+```
+
 ## Evidence Template
 
 ```markdown
@@ -110,4 +143,5 @@ This matrix is acceptable when:
 
 1. It covers the primary product flows that later epics can break.
 2. Each flow defines required validation and owning epic.
-3. Reviewers can use it to decide whether regression coverage is sufficient.
+3. Epic 1 UAT flows are explicit enough to review auth, server selection, Plex Home, watchlist/discover, deep-link, and failure-state changes.
+4. Reviewers can use it to decide whether regression and UAT coverage are sufficient.

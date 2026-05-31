@@ -17,30 +17,53 @@ Debt is not a hidden backlog. Every entry must have:
 
 | Severity | Meaning |
 | --- | --- |
+| Governance Blocker | Prevents Epic 0 from operating because a rule, artifact, owner, or evidence model is missing or contradictory |
 | Blocker | Must be resolved or explicitly scoped out before the affected epic can close |
 | Major | May proceed temporarily only with Project Owner acceptance and review date |
 | Minor | Non-blocking but tracked to prevent silent loss |
 
+## Debt Types
+
+| Type | Meaning | Epic 0 impact |
+| --- | --- | --- |
+| Governance blocker | A defect in the Epic 0 governance model itself | Epic 0 is not operational until resolved |
+| Inherited implementation blocker | A known product, security, privacy, testing, or platform defect discovered by Epic 0 and carried into a delivery epic | Epic 0 can be operational, but the affected epic cannot close until resolved or explicitly scoped out |
+| Accepted debt | A known limitation accepted for a bounded period with owner and review date | Does not block merge unless the acceptance expires or violates a gate |
+
 ## Debt Entries
 
-| Debt ID | Area | Severity | Description | Source | Owner | Affects Epics | Disposition | Review Date |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| DEBT-E0-001 | ATS | Blocker | App-wide `NSAllowsArbitraryLoads` remains enabled | `Docs/AUDIT_FINDINGS_LOCAL.md` M-4 | Epic 1 owner | 0, 1, 5 | Open | 2026-06-07 |
-| DEBT-E0-002 | Token Hygiene | Blocker | Token-bearing URLs still exist in watchlist, playback, and Top Shelf paths | `Docs/AUDIT_FINDINGS_LOCAL.md` M-5 and current repo findings | Epic 1 owner and Epic 4 owner | 0, 1, 2, 4, 5 | Open | 2026-06-07 |
-| DEBT-E0-003 | Privacy Manifest | Blocker | No `PrivacyInfo.xcprivacy` exists yet | Repo baseline | Epic 0 steward | 0, 1, 5 | Open | 2026-06-07 |
-| DEBT-E0-004 | Observability Policy Enforcement | Major | Logging remains heavily `print()`-driven and inconsistent | Current repo findings | Epic 1 owner and Epic 4 owner | 0, 1, 4, 5 | Open | 2026-06-14 |
-| DEBT-E0-005 | Swift 6 Build Truth | Major | `SWIFT_VERSION = 5.0` masks concurrency debt that is already known in the audit | `Docs/AUDIT_FINDINGS_LOCAL.md` H-9 | Project Owner | 0, 4, 5 | Open | 2026-06-14 |
-| DEBT-E0-006 | UI Automation Gap | Major | No formal UI regression target exists yet for Home, Preview, Detail, Playback, or Top Shelf | Epic 0 baseline | Epic 0 steward | 0, 2, 3, 4, 5 | Open | 2026-06-14 |
-| DEBT-E0-007 | Accessibility Automation Gap | Major | Accessibility validation is documented but not yet automated | Epic 0 baseline | Epic 0 steward | 0, 2, 3, 4, 5 | Open | 2026-06-14 |
-| DEBT-E0-008 | Performance Baseline Gap | Major | Performance budgets are defined, but no formal first-run capture set is stored yet | Epic 0 baseline | Epic 0 steward | 0, 2, 4, 5 | Open | 2026-06-14 |
-| DEBT-E0-009 | ADR Index Missing Before This Slice | Minor | ADRs existed without a tracked index before this governance completion slice | Epic 0 completion work | Epic 0 steward | 0 | Resolved in current slice | 2026-05-31 |
+| Debt ID | Area | Severity | Type | Description | Source | Owner | Affects Epics | Disposition | Review Date | Close Condition |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| DEBT-E0-001 | ATS | Blocker | Inherited implementation blocker | App-wide `NSAllowsArbitraryLoads` remains enabled | `Docs/AUDIT_FINDINGS_LOCAL.md` M-4 | Epic 1 owner | 1, 5 | Open | 2026-06-07 | ATS policy is scoped under ADR-004 and validated by security/privacy review |
+| DEBT-E0-002 | Token Hygiene | Blocker | Inherited implementation blocker | Token-bearing URLs still exist in watchlist, playback, and Top Shelf paths | `Docs/AUDIT_FINDINGS_LOCAL.md` M-5 and current repo findings | Epic 1 owner and Epic 4 owner | 1, 2, 4, 5 | Open | 2026-06-07 | Token-bearing diagnostics and extension payloads are eliminated or explicitly contained under ADR-002 |
+| DEBT-E0-003 | Privacy Manifest | Blocker | Inherited implementation blocker | No `PrivacyInfo.xcprivacy` exists yet | Repo baseline | Epic 1 owner | 1, 5 | Open | 2026-06-07 | Initial privacy manifest and disclosure matrix review are complete |
+| DEBT-E0-004 | Observability Policy Enforcement | Major | Inherited implementation blocker | Logging remains heavily `print()`-driven and inconsistent | Current repo findings | Epic 1 owner and Epic 4 owner | 1, 4, 5 | Open | 2026-06-14 | Changed auth/network/playback diagnostics use the observability policy and forbidden fields are removed from production sinks |
+| DEBT-E0-005 | Swift 6 Build Truth | Major | Inherited implementation blocker | `SWIFT_VERSION = 5.0` masks concurrency debt that is already known in the audit | `Docs/AUDIT_FINDINGS_LOCAL.md` H-9 | Project Owner | 4, 5 | Open | 2026-06-14 | Swift version and concurrency migration decision is recorded and validated |
+| DEBT-E0-006 | UI Automation Gap | Major | Accepted debt | No formal UI regression target exists yet for Home, Preview, Detail, Playback, or Top Shelf | Epic 0 baseline | Epic 0 steward | 2, 3, 4, 5 | Open | 2026-06-14 | UI automation lane exists or manual UAT evidence is accepted for affected flows |
+| DEBT-E0-007 | Accessibility Automation Gap | Major | Accepted debt | Accessibility validation is documented but not yet automated | Epic 0 baseline | Epic 0 steward | 2, 3, 4, 5 | Open | 2026-06-14 | Accessibility automation exists or manual accessibility evidence is accepted for affected flows |
+| DEBT-E0-008 | Performance Baseline Gap | Major | Accepted debt | Performance budgets are defined, but no formal first-run capture set is stored yet | Epic 0 baseline | Epic 0 steward | 2, 4, 5 | Open | 2026-06-14 | First performance baseline capture set is recorded or explicit Project Owner exception exists |
+| DEBT-E0-009 | ADR Index Missing Before This Slice | Minor | Governance blocker | ADRs existed without a tracked index before this governance completion slice | Epic 0 completion work | Epic 0 steward | 0 | Resolved | 2026-05-31 | ADR index exists and points to accepted Epic 0 ADRs |
+
+## Known-Failure Register
+
+Known failures are tracked here instead of in a separate artifact so debt, failure ownership, disposition, and review date stay in one governance surface.
+
+| Failure ID | Related Debt | Area | Current Finding | Replacement or Required Evidence | Owner | Blocks |
+| --- | --- | --- | --- | --- | --- | --- |
+| KF-E0-001 | DEBT-E0-001 | ATS | App-wide arbitrary loads are enabled | Scoped ATS policy review and validation evidence | Epic 1 owner | Epic 1 close |
+| KF-E0-002 | DEBT-E0-002 | Token Hygiene | Token-bearing URLs and stream URLs can reach logs, Sentry, or Top Shelf | Redaction tests, sanitized log examples, Sentry field review, Top Shelf payload review | Epic 1 owner and Epic 4 owner | Epic 1, Epic 2, and Epic 4 close as applicable |
+| KF-E0-003 | DEBT-E0-003 | Privacy Manifest | No privacy manifest exists | Initial privacy manifest and disclosure review evidence | Epic 1 owner | Epic 1 close |
+| KF-E0-004 | DEBT-E0-004 | Observability | Diagnostics are inconsistent and `print()`-heavy | Observability review records for changed surfaces | Epic 1 owner and Epic 4 owner | Affected work package close |
+| KF-E0-005 | None | Credential Storage | Older roadmap baseline said credential-storage tests were failing | Superseded by `E0-TEST-002`; re-run targeted credential tests if credential storage changes | Epic 1 owner | No current blocker |
 
 ## Debt Acceptance Rules
 
-1. Blocker debt may not be silently carried into epic closure.
-2. Major debt requires explicit Project Owner acceptance.
-3. Minor debt may be accepted by the relevant reviewer if it does not weaken a gate.
-4. Resolved debt remains in the register for traceability until Epic 5 closes.
+1. Governance blockers prevent Epic 0 from being operational until resolved.
+2. Inherited implementation blockers may be carried into a delivery epic only when owner, affected epic, review date, and close condition are recorded.
+3. Blocker debt may not be silently carried into epic closure.
+4. Major debt requires explicit Project Owner acceptance.
+5. Minor debt may be accepted by the relevant reviewer if it does not weaken a gate.
+6. Resolved debt remains in the register for traceability until Epic 5 closes.
 
 ## Review Requirements
 
@@ -53,5 +76,6 @@ Debt is not a hidden backlog. Every entry must have:
 This debt register is acceptable when:
 
 1. Current known cross-cutting debt is recorded explicitly.
-2. Every entry has owner, severity, disposition, and review date.
+2. Every entry has owner, severity, type, disposition, review date, and close condition.
 3. Reviewers can reject unsafe closure of an epic by citing an unresolved blocker debt entry.
+4. Known failures that affect Epic 1 are represented with replacement evidence or close conditions.

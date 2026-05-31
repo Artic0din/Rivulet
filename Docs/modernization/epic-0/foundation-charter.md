@@ -76,6 +76,8 @@ The current repository state justifies Epic 0 as an always-on stream:
 4. Performance and accessibility are first-order product requirements, not release-week cleanup.
 5. Exceptions are explicit, time-boxed, and recorded as accepted debt with owner and review date.
 6. Documentation is part of the product. If the gate cannot be reviewed, it does not exist.
+7. Epic 0 can be operational while implementation blockers remain open, provided those blockers are classified, owned, and carried into the affected delivery epic.
+8. Governance blockers prevent the Epic 0 control plane from operating. Inherited implementation blockers prevent the affected delivery epic from closing.
 
 ## Governance Roles
 
@@ -87,6 +89,17 @@ The current repository state justifies Epic 0 as an always-on stream:
 | Domain Reviewer | Reviewer with primary responsibility for the affected domain | Verifies security, privacy, accessibility, testing, performance, or observability evidence |
 | Release Gate Reviewer | Project Owner plus at least one domain reviewer | Makes the final ship/no-ship recommendation in Epic 5 |
 
+Ownership defaults to the Project Owner until a named owner is delegated in the relevant work package, PR, or artifact. A work package is not reviewable if ownership is left implicit.
+
+Every Epic 1 work package must name the following reviewers before merge:
+
+- security reviewer
+- privacy reviewer
+- testing reviewer
+- observability reviewer
+
+The same person may fill more than one reviewer role, but the role assignment must be explicit in the work package evidence.
+
 ## Required Artifact Set
 
 Epic 0 is operational only when the following artifacts exist and are current:
@@ -94,8 +107,8 @@ Epic 0 is operational only when the following artifacts exist and are current:
 - `Docs/modernization/epic-0/foundation-charter.md`
 - `Docs/modernization/epic-0/gate-matrix.md`
 - `Docs/modernization/epic-0/evidence-register.md`
-- `Docs/modernization/epic-0/regression-matrix.md`
-- `Docs/modernization/epic-0/debt-register.md`
+- `Docs/modernization/epic-0/regression-matrix.md` including the UAT matrix
+- `Docs/modernization/epic-0/debt-register.md` including the known-failure register
 - `Docs/modernization/epic-0/security-network-surface-inventory.csv`
 - `Docs/modernization/epic-0/privacy-disclosure-matrix.md`
 - `Docs/modernization/epic-0/accessibility-validation-matrix.md`
@@ -131,7 +144,9 @@ Every Epic 1 through Epic 5 work package inherits the following obligations:
 | Testing | Required automated tests added or updated; exact commands recorded | Regression pack complete and passing |
 | Performance | No unexplained budget breach; relevant metrics captured | Budget targets met or debt explicitly accepted |
 | Observability | Logs/events comply with policy; no forbidden fields | Observability evidence complete and reviewed |
-| Documentation | ADR updated if decision changed; evidence artifacts linked | All epic-specific evidence attached to the register |
+| Documentation | ADR updated if decision changed; evidence artifacts linked | All epic-specific evidence attached to the register, dependency assumptions documented, and known limitations recorded |
+
+Baseline evidence may be `Captured` to start a delivery epic when it documents the current state and is linked to a gate, debt item, or known failure. Gate-satisfying evidence for epic closure must be promoted to `Gate Satisfying` unless the Project Owner records an explicit exception.
 
 ## Review Requirements
 
@@ -142,6 +157,8 @@ The following reviews are mandatory:
 3. Any change affecting focus, overlays, playback controls, or core navigation requires an accessibility review.
 4. Any change affecting launch, home, preview, or playback startup must include a performance review.
 5. Any change introducing a new log, breadcrumb, crash field, or telemetry field requires an observability review.
+6. Any Epic 1 work package must explicitly identify security, privacy, testing, and observability reviewers before it is eligible for merge.
+7. Any release-time architecture change, release exception, or risk-acceptance decision in Epic 5 requires ADR review or an explicit ADR exemption note.
 
 ## Evidence Requirements
 
@@ -162,15 +179,33 @@ Acceptable evidence includes:
 - Structured metric captures
 - Linked issue references for approved exceptions
 
+Evidence needed to begin Epic 1:
+
+- accepted Epic 0 gate matrix and ADR set
+- captured baseline evidence for security, privacy, observability, testing, and build state
+- endpoint inventory entries for known Plex, Discover, Top Shelf, Sentry, ATS, and trust surfaces
+- UAT coverage for Epic 1 auth, server selection, Plex Home, watchlist/discover, deep-link, and failure-state flows
+- known-failure and implementation-blocker entries for unresolved ATS, token, privacy, and observability risks
+
+Evidence needed to close Epic 1:
+
+- reviewed evidence for every changed auth, network, endpoint, token, privacy, and observability surface
+- reviewed endpoint classification and containment evidence for all Plex integration paths
+- reviewed test evidence for the applicable Epic 1 command pack and UAT flows
+- reviewed debt disposition for every blocker that affects Epic 1
+
 ## Gate Failure Escalation
 
 ### Severity Levels
 
 | Severity | Definition | Required action |
 | --- | --- | --- |
+| Governance Blocker | Missing or contradictory Epic 0 rule, artifact, owner, or evidence model that prevents review from operating | Epic 0 cannot be treated as operational until corrected |
 | Blocker | Security, privacy, accessibility, or playback-risk issue that invalidates the change | Merge blocked; owner review required; issue must be opened or fixed before progress continues |
 | Major | Gate unmet but the change can proceed only with explicit short-term debt acceptance | Project Owner approval required; debt register entry required; review date required |
 | Minor | Non-blocking improvement or incomplete evidence formatting | Fix before epic close; may merge only if reviewer accepts immediate follow-up |
+
+Implementation blockers may be carried from Epic 0 into a delivery epic only when they are recorded in the debt register as inherited implementation blockers with owner, affected epic, review date, and close condition. They do not prevent Epic 0 from being operational, but they do prevent the affected delivery epic from closing.
 
 ### Escalation Path
 
@@ -188,12 +223,13 @@ Epic 0 is considered operational when all of the following are true:
 2. The required ADR set is accepted.
 3. Every delivery epic can point to explicit inherited gates, required artifacts, and review rules.
 4. The parity scorecard exists and is wired to evidence requirements.
-5. The regression matrix exists and defines must-not-regress flows.
-6. The debt register exists and records current cross-cutting debt.
+5. The regression matrix exists and defines must-not-regress flows and UAT flows.
+6. The debt register exists and records current cross-cutting debt, known failures, and inherited implementation blockers.
 7. The ADR index exists and points to the accepted Epic 0 ADR set.
 8. The media validation corpus exists and covers direct play, remux, HLS, HDR, Dolby Vision, Dolby Atmos, subtitles, high bitrate content, TV, movies, and Live TV.
 9. The evidence register contains baseline entries drawn from the current repo findings.
 10. At least one fresh verification artifact exists for each of: testing, privacy, observability, and build baseline.
+11. Baseline evidence rules clearly distinguish captured evidence, reviewed evidence, superseded evidence, and gate-satisfying evidence.
 
 ## Exit Gate
 
@@ -203,6 +239,7 @@ Epic 0 does not “complete once.” It becomes operational when:
 - Reviewers can reject or accept work using this charter and the supporting artifact set
 - Exceptions have a formal escalation path
 - Evidence can be attached consistently and reviewed independently
+- Open implementation blockers are explicitly carried into their affected epics rather than treated as unresolved Epic 0 governance gaps
 
 ## Review Cadence
 
