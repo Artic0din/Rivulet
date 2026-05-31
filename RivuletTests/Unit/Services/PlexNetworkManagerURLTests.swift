@@ -15,6 +15,83 @@ final class PlexNetworkManagerURLTests: XCTestCase {
     let testAuthToken = "test-auth-token"
     let testRatingKey = "12345"
 
+    // MARK: - Header-First Token Transport Tests
+
+    func testBuildHeaderFirstPMSRequestUsesHeaderTokenAndNoTokenQuery() throws {
+        let corePaths = [
+            "/library/sections",
+            "/library/metadata/\(testRatingKey)",
+            "/hubs",
+            "/hubs/sections/1",
+            "/search",
+            "/playlists"
+        ]
+
+        for path in corePaths {
+            let request = try networkManager.buildHeaderFirstPMSRequest(
+                serverURL: testServerURL,
+                authToken: testAuthToken,
+                path: path,
+                queryItems: [URLQueryItem(name: "includeGuids", value: "1")]
+            )
+
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Plex-Token"), testAuthToken)
+            XCTAssertNil(queryValue(in: request.url, named: "X-Plex-Token"))
+            XCTAssertEqual(queryValue(in: request.url, named: "includeGuids"), "1")
+        }
+    }
+
+    func testBuildHeaderFirstPlexTVRequestUsesHeaderTokenAndNoTokenQuery() throws {
+        let request = try networkManager.buildHeaderFirstPlexTVRequest(
+            path: "/api/v2/resources",
+            authToken: testAuthToken,
+            queryItems: [URLQueryItem(name: "includeHttps", value: "1")]
+        )
+
+        XCTAssertEqual(request.url?.host, "plex.tv")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Plex-Token"), testAuthToken)
+        XCTAssertNil(queryValue(in: request.url, named: "X-Plex-Token"))
+        XCTAssertEqual(queryValue(in: request.url, named: "includeHttps"), "1")
+    }
+
+    func testBuildHeaderFirstRequestRemovesTokenLikeQueryItems() throws {
+        let request = try networkManager.buildHeaderFirstPMSRequest(
+            serverURL: testServerURL,
+            authToken: testAuthToken,
+            path: "/library/metadata/\(testRatingKey)",
+            queryItems: [
+                URLQueryItem(name: "X-Plex-Token", value: "query-token"),
+                URLQueryItem(name: "token", value: "query-token"),
+                URLQueryItem(name: "authToken", value: "query-token"),
+                URLQueryItem(name: "accessToken", value: "query-token"),
+                URLQueryItem(name: "includeGuids", value: "1")
+            ]
+        )
+
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Plex-Token"), testAuthToken)
+        XCTAssertNil(queryValue(in: request.url, named: "X-Plex-Token"))
+        XCTAssertNil(queryValue(in: request.url, named: "token"))
+        XCTAssertNil(queryValue(in: request.url, named: "authToken"))
+        XCTAssertNil(queryValue(in: request.url, named: "accessToken"))
+        XCTAssertEqual(queryValue(in: request.url, named: "includeGuids"), "1")
+    }
+
+    func testRetainedQueryTokenPathsRemainExplicitForPlaybackAndImageConsumers() {
+        let playbackURL = networkManager.buildPlaybackDirectPlayURL(
+            serverURL: testServerURL,
+            authToken: testAuthToken,
+            partKey: "/library/parts/67890/0/file.mkv"
+        )
+        let thumbnailURL = networkManager.buildThumbnailURL(
+            serverURL: testServerURL,
+            authToken: testAuthToken,
+            thumbPath: "/library/metadata/12345/thumb/1234567890"
+        )
+
+        XCTAssertEqual(queryValue(in: playbackURL, named: "X-Plex-Token"), testAuthToken)
+        XCTAssertEqual(queryValue(in: thumbnailURL, named: "X-Plex-Token"), testAuthToken)
+    }
+
     // MARK: - Direct Play URL Tests
 
     func testBuildDirectPlayURLIncludesToken() {
@@ -240,10 +317,8 @@ final class PlexNetworkManagerURLTests: XCTestCase {
         )
 
         XCTAssertNotNil(result)
-        // Token may be in URL or in headers
-        let tokenInURL = result!.url.absoluteString.contains("X-Plex-Token=\(testAuthToken)")
-        let tokenInHeaders = result!.headers["X-Plex-Token"] == testAuthToken
-        XCTAssertTrue(tokenInURL || tokenInHeaders, "Token should be in URL or headers")
+        XCTAssertNil(queryValue(in: result!.url, named: "X-Plex-Token"))
+        XCTAssertEqual(result!.headers["X-Plex-Token"], testAuthToken)
     }
 
     func testBuildHLSDirectPlayURLIncludesClientProfile() {
@@ -410,5 +485,13 @@ final class PlexNetworkManagerURLTests: XCTestCase {
         XCTAssertNotNil(headers["X-Plex-Product"])
         XCTAssertNotNil(headers["X-Plex-Platform"])
         XCTAssertNotNil(headers["X-Plex-Device"])
+    }
+
+    private func queryValue(in url: URL?, named name: String) -> String? {
+        guard let url,
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        return components.queryItems?.first(where: { $0.name == name })?.value
     }
 }

@@ -189,6 +189,70 @@ rg -n "setExtra" Rivulet TopShelfExtension | wc -l
 rg -n "print\\(" Rivulet/Services/Plex Rivulet/Services/MediaProvider/Plex TopShelfExtension Rivulet/RivuletApp.swift | wc -l
 ```
 
+## Epic 1 PR 5 Header-First Token Transport Evidence Entries
+
+These records capture the current state for Epic 1 PR 5 only. PR 5 moves locally verifiable core Plex API request construction to header-first authentication and explicitly retains query-token paths where playback, image handoff, Discover/provider behavior, or downstream epic ownership makes migration unsafe in this slice.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E1-PR5-AUDIT-001 | Security/Token Transport | 2026-06-01 | Epic 1 owner | Token transport audit completed for plex.tv account/resource/Home APIs, PMS browse/metadata/hub/search/state APIs, PMS playlist/music/radio APIs, playback/transcode URL builders, Discover/provider APIs, media asset URLs, Top Shelf image handoff, Siri/search images, Live TV, and stream-selection writes | Code review of `Rivulet/Services/Plex/PlexNetworkManager.swift`, `Rivulet/Services/Plex/PlexRadioService.swift`, `Rivulet/Views/Music/MusicHomeView.swift`, `Rivulet/Services/Plex/PlexWatchlistAPI.swift`, Top Shelf cache models, Siri media entity image construction, and PR 5 scan command log | Captured | Pending | Header-first migration is safe for core non-media PMS request construction, playlists, music genre browse, and radio hub fetches. Query-token transport is retained and explicitly contained for playback/transcode, media asset/image URLs, Top Shelf image handoff, Discover/provider endpoints, Siri/search image handoff, Live TV stream URL builders, and stream-selection writes |
+| E1-PR5-TEST-RED-001 | Testing/TDD | 2026-06-01 | Epic 1 owner | Header-first token transport tests were added before implementation and failed as expected because shared request builders did not exist | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexNetworkManagerURLTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_07-57-08-+1000.xcresult` | Captured | Pending | Expected TDD red result: compiler failures for missing `buildHeaderFirstPMSRequest` and `buildHeaderFirstPlexTVRequest` |
+| E1-PR5-MIGRATION-001 | Security/Token Transport | 2026-06-01 | Epic 1 owner | Header-first token transport implemented for shared PMS and plex.tv request builders, PMS playlists, PMS music genre browse, and PMS radio hub fetches | Code changes in `Rivulet/Services/Plex/PlexNetworkManager.swift`, `Rivulet/Services/Plex/PlexRadioService.swift`, and `Rivulet/Views/Music/MusicHomeView.swift` | Captured | Pending | Migrated requests now send `X-Plex-Token` as an HTTP header and no longer include `X-Plex-Token` query items for those endpoint families. Shared header-first builders strip token-like query items before URL construction. Existing core PMS browse, metadata, search, hubs, state-write, plex.tv resource, and Plex Home request paths were confirmed already header-first or covered by the new builder tests |
+| E1-PR5-CONTAIN-001 | Security/Endpoint Containment | 2026-06-01 | Epic 1 owner | Retained query-token endpoint families were listed and justified for this PR boundary | PR 5 scan command log plus `Docs/modernization/epic-0/security-network-surface-inventory.csv` updates for `NET-012`, `NET-013`, `NET-015`, `NET-016`, `NET-017`, `NET-019`, `NET-026`, `NET-027`, and `NET-028` | Captured | Pending | Retained paths are playback/transcode and direct media URLs where header support affects playback behavior, system-consumed image URLs and Top Shelf/Siri handoffs where headers cannot be attached reliably, Discover/provider APIs requiring account-token query parameters pending live evidence, and stream-selection writes pending endpoint-specific verification |
+| E1-PR5-TEST-001 | Testing/Network URL Contract | 2026-06-01 | Epic 1 owner | Plex network URL targeted test run succeeded after PR 5 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexNetworkManagerURLTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_08-14-17-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 32 network URL tests passed. New tests prove core PMS and plex.tv header-first builders put `X-Plex-Token` in headers only, token-like query items are stripped from header-first request builders, retained playback/image query-token paths remain explicit, and HLS direct-play auth remains header-only |
+| E1-PR5-TEST-002 | Testing/Credential Storage | 2026-06-01 | Epic 1 owner | Credential registry targeted test run succeeded after PR 5 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/CredentialRegistryTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_08-12-41-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 7 credential registry tests passed |
+| E1-PR5-TEST-003 | Testing/Auth | 2026-06-01 | Epic 1 owner | Plex auth targeted test run succeeded after PR 5 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexAuthManagerTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_08-13-31-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 17 auth tests passed |
+| E1-PR5-TEST-004 | Testing/Watchlist | 2026-06-01 | Epic 1 owner | Plex watchlist targeted test run succeeded after PR 5 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexWatchlistServiceTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_08-15-05-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 7 watchlist service tests passed. Discover/provider query-token behavior was not changed |
+| E1-PR5-TEST-005 | Testing/Security | 2026-06-01 | Epic 1 owner | Sensitive data redactor targeted test run succeeded after PR 5 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/SensitiveDataRedactorTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_08-15-40-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 11 redaction tests passed |
+| E1-PR5-BUILD-001 | Testing/Build | 2026-06-01 | Epic 1 owner | Whitespace diff validation succeeded for PR 5 | Command `git diff --check` | Captured | Pending | Result: no output and exit code 0 |
+| E1-PR5-BUILD-002 | Testing/Build | 2026-06-01 | Epic 1 owner | Fresh tvOS simulator build succeeded after PR 5 token transport changes | Command `xcodebuild -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' build` | Captured | Pending | Result `** BUILD SUCCEEDED **`; existing unrelated Swift concurrency/deprecation warnings and existing Sentry script output warning remain |
+| E1-PR5-SCAN-001 | Security/Observability | 2026-06-01 | Epic 1 owner | PR 5 token, query-token, provider-host, Sentry, stream URL, setExtra, print, and changed-file sensitive scans completed | PR 5 scan command log: `SCAN-X-PLEX-TOKEN`, `SCAN-TOKEN-QUERY-CONSTRUCTION`, `SCAN-URLQUERYITEM-X-PLEX-TOKEN`, `SCAN-URLQUERYITEM-TOKEN`, `SCAN-SETVALUE-ADDVALUE-X-PLEX-TOKEN`, `SCAN-STREAM-URL`, `SCAN-SENTRY-CAPTURE`, `SCAN-SETEXTRA`, `SCAN-SCOPED-PRINT`, `SCAN-CHANGED-RAW-DIAGNOSTICS`, `SCAN-PROVIDER-HOSTS`, `SCAN-TOKEN-BEARING-IMAGE-METADATA`, and `SCAN-CHANGED-FILES-TOKEN-VALUES` | Captured | Pending | PR 4 before baseline: 88 source `X-Plex-Token` lines across 29 files, 27 `SentrySDK.capture`, 56 `setExtra`, and 94 scoped `print()` lines. PR 5 after scan: 79 source `X-Plex-Token` lines across 29 files, 43 token query-construction lines, 17 `URLQueryItem(name: "X-Plex-Token")` lines, 0 `URLQueryItem(name: "token")` lines, 3 `setValue`/`addValue` `X-Plex-Token` matches, 20 `stream_url` lines, 27 `SentrySDK.capture`, 56 `setExtra`, 94 scoped `print()` lines, 2 `discover.provider.plex.tv` lines, 3 `metadata.provider.plex.tv` lines, and 16 token-bearing image/metadata lines. Changed-file scans found expected dummy test tokens, header assignments, retained image/playback assertions, existing redacted Sentry extras in `PlexNetworkManager`, and no new raw token/credential diagnostic emission |
+
+### Epic 1 PR 5 Scan Command Log
+
+```bash
+# SCAN-X-PLEX-TOKEN
+rg -n "X-Plex-Token" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+rg -l "X-Plex-Token" Rivulet TopShelfExtension --glob '*.swift' | sort | wc -l
+
+# SCAN-TOKEN-QUERY-CONSTRUCTION
+rg -n "URLQueryItem\\(name: \"X-Plex-Token\"|URLQueryItem\\(name: \"token\"|[?&]X-Plex-Token=|[?&]token=" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-URLQUERYITEM-X-PLEX-TOKEN
+rg -n "URLQueryItem\\(name: \"X-Plex-Token\"" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-URLQUERYITEM-TOKEN
+rg -n "URLQueryItem\\(name: \"token\"" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-SETVALUE-ADDVALUE-X-PLEX-TOKEN
+rg -n "(setValue|addValue)\\([^\\n]*X-Plex-Token|X-Plex-Token[^\\n]*(setValue|addValue)" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-STREAM-URL
+rg -n "stream_url" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-SENTRY-CAPTURE
+rg -n "SentrySDK\\.capture" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-SETEXTRA
+rg -n "setExtra" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-SCOPED-PRINT
+rg -n "print\\(" Rivulet/Services/Plex Rivulet/Services/MediaProvider/Plex TopShelfExtension Rivulet/RivuletApp.swift --glob '*.swift' | wc -l
+
+# SCAN-CHANGED-RAW-DIAGNOSTICS
+rg -n "print\\(.*(X-Plex-Token|authToken|selectedServerToken|serverToken|token|url|URL|absoluteString)|SentrySDK\\.capture|setExtra|setTag" Rivulet/Services/Plex/PlexNetworkManager.swift Rivulet/Services/Plex/PlexRadioService.swift Rivulet/Views/Music/MusicHomeView.swift RivuletTests/Unit/Services/PlexNetworkManagerURLTests.swift
+
+# SCAN-PROVIDER-HOSTS
+rg -n "discover\\.provider\\.plex\\.tv" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+rg -n "metadata\\.provider\\.plex\\.tv" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-TOKEN-BEARING-IMAGE-METADATA
+rg -n "(thumb|art|image|metadata|poster|Image).*X-Plex-Token|X-Plex-Token.*(thumb|art|image|metadata|poster|Image)" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-CHANGED-FILES-TOKEN-VALUES
+rg -n "test-auth-token|authToken|selectedServerToken|serverToken|homeUserToken|X-Plex-Token|PIN|pin|password|credential" Rivulet/Services/Plex/PlexNetworkManager.swift Rivulet/Services/Plex/PlexRadioService.swift Rivulet/Views/Music/MusicHomeView.swift RivuletTests/Unit/Services/PlexNetworkManagerURLTests.swift
+```
+
 ## Baseline Supersession Register
 
 Supersession records are used when a newer verification result replaces an older roadmap assumption, audit note, or evidence item. The replacement does not change the approved roadmap structure; it updates the factual baseline used for execution.

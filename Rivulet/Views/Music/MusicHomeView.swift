@@ -676,7 +676,7 @@ struct MusicHomeView: View {
     private func loadGenres() async {
         guard let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken else { return }
-        guard let url = URL(string: "\(serverURL)/library/sections/\(libraryKey)/genre?X-Plex-Token=\(token)") else { return }
+        guard let url = URL(string: "\(serverURL)/library/sections/\(libraryKey)/genre") else { return }
 
         do {
             struct GenreResponse: Codable {
