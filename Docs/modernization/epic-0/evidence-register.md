@@ -314,6 +314,63 @@ rg -n "print\\(" Rivulet/Services/Plex Rivulet/Services/MediaProvider/Plex TopSh
 rg -n "KeychainHelper\\.(set|get|delete|deleteAllPins|setPin|getPin|hasSavedPin|deletePin)|UserDefaults|userDefaults\\.|selectedPlexUser|showPlexProfilePickerOnLaunch|plexRememberedPinUserUUIDs|CredentialRegistry|CredentialScope|serverUser" Rivulet/Services/Plex/PlexUserProfileManager.swift Rivulet/Services/Plex/PlexAuthManager.swift Rivulet/Services/Plex/PlexNetworkManager.swift Rivulet/Services/MediaProvider/CredentialRegistry.swift Rivulet/Services/Security/KeychainHelper.swift
 ```
 
+## Epic 1 PR 7 Multi-Server Discovery and Selection Evidence Entries
+
+These records capture the current state for Epic 1 PR 7 only. PR 7 makes multi-server identity, discovery enrichment, selected-server persistence, and connection ordering deterministic without changing endpoint semantics, token transport strategy, auth UX, playback behavior, Top Shelf behavior, Discover/provider behavior, or watchlist behavior.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E1-PR7-AUDIT-001 | Plex Server Discovery/Selection | 2026-06-01 | Epic 1 owner | Multi-server discovery and selection audit completed | Code review of `PlexNetworkManager.getServers`, `/pms/servers.xml` machine-identifier enrichment, `PlexAuthManager.selectServer`, `verifyAndFixConnection`, selected-server persistence keys, and PR 7 scan command log | Captured | Pending | Prior behavior attached machine identifiers by server display name and could reselect by display-name fallback when URLs changed. PR 7 records that duplicate server names are unsafe as stable identity and that stable identifiers must take precedence over URL and unique display-name fallback. |
+| E1-PR7-TEST-RED-001 | Testing/TDD | 2026-06-01 | Epic 1 owner | Multi-server selection tests were added before implementation and failed as expected because the selection policy seam did not exist | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexServerSelectionPolicyTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-10-09-+1000.xcresult` | Captured | Pending | Expected red result: compiler failure for missing `PlexServerSelectionPolicy` after adding tests for duplicate names, stable identifiers, and deterministic connection ordering. |
+| E1-PR7-IDENTITY-001 | Plex Server Discovery/Selection | 2026-06-01 | Epic 1 owner | Stable selected-server identity implementation added | Code changes in `Rivulet/Services/Plex/PlexServerSelectionPolicy.swift`, `Rivulet/Services/Plex/PlexAuthManager.swift`, and `Rivulet/Services/Plex/PlexNetworkManager.swift` | Captured | Pending | Selected server now stores a non-secret stable identifier in `UserDefaults` as `selectedServerIdentifier`. Matching order is stable identifier, exact saved URL, then display name only when unique. Provider IDs use machine identifier where available and client identifier as fallback. `/pms/servers.xml` enrichment no longer maps duplicate display names to machine identifiers. |
+| E1-PR7-TRUST-001 | ATS/Trust Boundary | 2026-06-01 | Epic 1 owner | PR 7 trust and ATS review completed without broadening trust behavior | PR 7 trust scan command log | Captured | Pending | Scan still finds `NSAllowsArbitraryLoads`, `NSAllowsLocalNetworking`, `PlexCertificateDelegate`, `PlexNetworkManager` trust handling, `PlexThumbnailService.TrustingSessionDelegate`, and `ImageCacheManager` trust handling. PR 7 does not change trust delegates or ATS behavior; debt remains open under ADR-004. |
+| E1-PR7-PRIV-001 | Privacy/Selected Server Persistence | 2026-06-01 | Epic 1 owner | Privacy disclosure updated for non-secret selected server stable identifier persistence | `Docs/modernization/epic-0/privacy-disclosure-matrix.md`; PR 7 selected-server persistence scan | Captured | Pending | `selectedServerIdentifier` is non-secret server selection metadata in `UserDefaults`. Tokens remain Keychain/`CredentialRegistry` owned. No new external sink, token storage, Top Shelf payload, deep-link payload, Sentry payload, or playback data flow is introduced. |
+| E1-PR7-TEST-001 | Testing/Multi-Server Selection | 2026-06-01 | Epic 1 owner | New multi-server selection targeted test run succeeded | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexServerSelectionPolicyTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-12-20-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 7 tests passed covering duplicate-name exclusion, client-identifier machine-ID attachment, stable-ID matching, ambiguous duplicate-name rejection, unique-name fallback, deterministic local/remote/relay ordering, Docker/localhost filtering, and provider ID derivation. |
+| E1-PR7-TEST-002 | Testing/Credential Storage | 2026-06-01 | Epic 1 owner | Credential registry targeted test run succeeded after PR 7 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/CredentialRegistryTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-14-32-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 7 credential registry tests passed. |
+| E1-PR7-TEST-003 | Testing/Auth | 2026-06-01 | Epic 1 owner | Plex auth targeted test run succeeded after PR 7 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexAuthManagerTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-15-02-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 18 Plex auth tests passed. |
+| E1-PR7-TEST-004 | Testing/Network URL Contract | 2026-06-01 | Epic 1 owner | Plex network URL targeted test run succeeded after PR 7 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexNetworkManagerURLTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-15-38-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 34 Plex network URL tests passed. |
+| E1-PR7-TEST-005 | Testing/Watchlist | 2026-06-01 | Epic 1 owner | Plex watchlist targeted test run succeeded after PR 7 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexWatchlistServiceTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-16-09-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 7 watchlist tests passed. PR 7 does not change Discover/provider/watchlist behavior. |
+| E1-PR7-TEST-006 | Testing/Security | 2026-06-01 | Epic 1 owner | Sensitive data redactor targeted test run succeeded after PR 7 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/SensitiveDataRedactorTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-16-39-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 11 sensitive data redactor tests passed. |
+| E1-PR7-TEST-007 | Testing/Plex Home Identity | 2026-06-01 | Epic 1 owner | Plex Home identity targeted test run succeeded after PR 7 implementation | Command `xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' -only-testing:RivuletTests/PlexHomeIdentityTests`; artifact `/Users/ryanfoyle/Library/Developer/Xcode/DerivedData/Rivulet-gabpboyolqqwbifanrzerfgqmrsu/Logs/Test/Test-Rivulet-2026.06.01_09-18-34-+1000.xcresult` | Captured | Pending | Result `** TEST SUCCEEDED **`; 5 Plex Home identity tests passed. PR 7 does not change Home switch endpoint semantics. |
+| E1-PR7-BUILD-001 | Testing/Build | 2026-06-01 | Epic 1 owner | Fresh tvOS simulator build succeeded after PR 7 implementation | Command `xcodebuild -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' build` | Captured | Pending | Result `** BUILD SUCCEEDED **`; existing unrelated Swift warnings and existing Sentry run-script warning remain. |
+| E1-PR7-BUILD-002 | Testing/Diff Hygiene | 2026-06-01 | Epic 1 owner | Whitespace diff validation succeeded for PR 7 | Command `git diff --check` | Captured | Pending | Result: no output and exit code 0. |
+| E1-PR7-SCAN-001 | Security/Privacy/Observability | 2026-06-01 | Epic 1 owner | PR 7 server discovery, selected server persistence, selected server token storage, connection URI selection, relay/local handling, trust, Sentry, print, and changed-file token scans completed | PR 7 scan command log | Captured | Pending | Results: server discovery still uses `/api/v2/resources` plus retained `/pms/servers.xml` machine-ID enrichment; selected server token remains Keychain/`CredentialRegistry`; `selectedServerIdentifier` is non-secret `UserDefaults` metadata; connection ordering is centralized in `PlexServerSelectionPolicy`; trust scan still finds app-wide ATS and existing trust delegates; source counts remain 79 `X-Plex-Token` lines across 29 files, 27 `SentrySDK.capture`, 56 `setExtra`, and 96 scoped `print()` lines. Changed-file token scan found identifiers, variable names, header names, and test fixture shapes only; no real token, PIN, password, or credential value was introduced. |
+
+### Epic 1 PR 7 Scan Command Log
+
+```bash
+# SCAN-SERVER-DISCOVERY-ENDPOINTS
+rg -n "api/v2/resources|pms/servers\\.xml|getServers\\(|getServerMachineIdentifiers|parseServerMachineIdentifiers|machineIdentifierLookup" Rivulet/Services/Plex RivuletTests/Unit/Services --glob '*.swift'
+
+# SCAN-SELECTED-SERVER-PERSISTENCE
+rg -n "selectedServerIdentifier|selectedServerURL|selectedServerName|selectedServerToken|keychainServerTokenKey|CredentialRegistry\\.shared\\.setToken|registerSelectedServerCredential" Rivulet/Services/Plex/PlexAuthManager.swift RivuletTests/Unit/Services/PlexServerSelectionPolicyTests.swift
+
+# SCAN-CONNECTION-URI-SELECTION
+rg -n "findBestConnection|orderedConnections|connectionScore|local|relay|buildPlexDirectURL|isDockerOrInternalAddress|plex\\.direct|connection\\.uri" Rivulet/Services/Plex/PlexAuthManager.swift Rivulet/Services/Plex/PlexServerSelectionPolicy.swift RivuletTests/Unit/Services/PlexServerSelectionPolicyTests.swift
+
+# SCAN-TRUST-AND-ATS
+rg -n "NSAllowsArbitraryLoads|NSAllowsLocalNetworking|URLSessionDelegate|didReceive challenge|serverTrust|PlexCertificateDelegate|SecTrust|TrustingSessionDelegate" Rivulet TopShelfExtension --glob '*.swift' --glob '*.plist'
+
+# SCAN-CHANGED-FILES-SENTRY-PRINTS
+rg -n "SentrySDK\\.capture|setExtra|print\\(" Rivulet/Services/Plex/PlexAuthManager.swift Rivulet/Services/Plex/PlexNetworkManager.swift Rivulet/Services/Plex/PlexServerSelectionPolicy.swift
+
+# SCAN-CHANGED-FILES-TOKEN-VALUES
+rg -n "(token|authToken|accessToken|selectedServerToken|serverToken|homeUserToken|pin|PIN|password|credential|X-Plex-Token)" Rivulet/Services/Plex/PlexAuthManager.swift Rivulet/Services/Plex/PlexNetworkManager.swift Rivulet/Services/Plex/PlexServerSelectionPolicy.swift RivuletTests/Unit/Services/PlexServerSelectionPolicyTests.swift
+
+# SCAN-X-PLEX-TOKEN
+rg -n "X-Plex-Token" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+rg -l "X-Plex-Token" Rivulet TopShelfExtension --glob '*.swift' | sort | wc -l
+
+# SCAN-SENTRY-CAPTURE
+rg -n "SentrySDK\\.capture" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-SETEXTRA
+rg -n "setExtra" Rivulet TopShelfExtension --glob '*.swift' | wc -l
+
+# SCAN-SCOPED-PRINT
+rg -n "print\\(" Rivulet/Services/Plex Rivulet/Services/MediaProvider/Plex TopShelfExtension Rivulet/RivuletApp.swift --glob '*.swift' | wc -l
+```
+
 ## Baseline Supersession Register
 
 Supersession records are used when a newer verification result replaces an older roadmap assumption, audit note, or evidence item. The replacement does not change the approved roadmap structure; it updates the factual baseline used for execution.

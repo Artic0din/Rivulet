@@ -113,6 +113,7 @@ class PlexAuthManager: ObservableObject {
     private let usernameKey = "plexUsername"
     private let serverURLKey = "selectedServerURL"
     private let serverNameKey = "selectedServerName"
+    private let serverIdentifierKey = "selectedServerIdentifier"
     /// Sentinel set after a successful auth. Used to detect fresh installs —
     /// UserDefaults is wiped on app uninstall but Keychain persists, so if this
     /// flag is missing while the Keychain still has tokens, the Keychain data
@@ -249,6 +250,7 @@ class PlexAuthManager: ObservableObject {
                 selectedServerURL = workingURL
                 userDefaults.set(selectedServerURL, forKey: serverURLKey)
                 userDefaults.set(server.name, forKey: serverNameKey)
+                userDefaults.set(PlexServerSelectionPolicy.stableServerIdentifier(for: server), forKey: serverIdentifierKey)
 
                 // Save the correct token for this server (securely in Keychain)
                 // For shared servers, use server-specific accessToken; for owned, use user's authToken
@@ -289,15 +291,7 @@ class PlexAuthManager: ObservableObject {
     /// - If httpsRequired=false + local: HTTP (fastest) > plex.direct
     /// - Remote: current behavior (plex.direct URLs from API)
     private func findBestConnection(for server: PlexDevice) async -> String? {
-        let validConnections = (server.connections ?? [])
-            .filter { !isDockerOrInternalAddress($0.address) }
-
-        // Sort by preference: local non-relay > remote > relay
-        let sortedConnections = validConnections.sorted { conn1, conn2 in
-            let score1 = connectionScore(conn1)
-            let score2 = connectionScore(conn2)
-            return score1 > score2
-        }
+        let sortedConnections = PlexServerSelectionPolicy.orderedConnections(server.connections ?? [])
 
         // For shared servers (not owned by user), use server-specific accessToken
         let tokenToUse = server.accessToken
@@ -403,58 +397,19 @@ class PlexAuthManager: ObservableObject {
     /// - Local prefers HTTP (fastest when secure connections not required)
     /// - For httpsRequired servers, plex.direct is tried first (valid TLS for playback)
     private func connectionScore(_ connection: PlexConnection) -> Int {
-        var score = 0
-
-        // Prefer non-relay (direct connections)
-        if !connection.relay { score += 1000 }
-
-        // Prefer local connections
-        if connection.local {
-            score += 500
-            // For local: prefer HTTP (avoids certificate issues)
-            if connection.protocolType == "http" { score += 50 }
-        } else {
-            // For remote: prefer HTTPS (required by ATS)
-            if connection.protocolType == "https" { score += 100 }
-            // plex.direct domains are reliable for remote access
-            if connection.address.contains(".plex.direct") { score += 50 }
-        }
-
-        return score
+        PlexServerSelectionPolicy.connectionScore(connection)
     }
 
     /// Build a plex.direct URL for secure remote access
     /// Plex issues SSL certificates for *.plex.direct domains
     /// Format: https://<ip-with-dashes>.<machineIdentifier>.plex.direct:<port>
     private func buildPlexDirectURL(address: String, port: Int, machineIdentifier: String) -> String {
-        let ipWithDashes = address.replacingOccurrences(of: ".", with: "-")
-        return "https://\(ipWithDashes).\(machineIdentifier).plex.direct:\(port)"
+        PlexServerSelectionPolicy.buildPlexDirectURL(address: address, port: port, machineIdentifier: machineIdentifier)
     }
 
     /// Check if address is a Docker/internal bridge network
     private func isDockerOrInternalAddress(_ address: String) -> Bool {
-        // Docker default bridge networks (172.17-31.x.x range)
-        // Note: We intentionally do NOT filter 10.x.x.x as these are common home network ranges
-        let dockerPrefixes = [
-            "172.17.", "172.18.", "172.19.", "172.20.", "172.21.",
-            "172.22.", "172.23.", "172.24.", "172.25.", "172.26.",
-            "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
-        ]
-
-        // Localhost variants (not useful for Apple TV)
-        let localhostAddresses = ["127.0.0.1", "localhost", "::1"]
-
-        for prefix in dockerPrefixes {
-            if address.hasPrefix(prefix) {
-                return true
-            }
-        }
-
-        if localhostAddresses.contains(address) {
-            return true
-        }
-
-        return false
+        PlexServerSelectionPolicy.isDockerOrInternalAddress(address)
     }
 
     /// Test if a connection URL is reachable
@@ -592,6 +547,7 @@ class PlexAuthManager: ObservableObject {
         userDefaults.removeObject(forKey: usernameKey)
         userDefaults.removeObject(forKey: serverURLKey)
         userDefaults.removeObject(forKey: serverNameKey)
+        userDefaults.removeObject(forKey: serverIdentifierKey)
         userDefaults.removeObject(forKey: hasPersistedSessionKey)
 
         // Clear any legacy tokens that might still exist
@@ -680,6 +636,10 @@ class PlexAuthManager: ObservableObject {
         userDefaults.string(forKey: serverNameKey)
     }
 
+    var savedServerIdentifier: String? {
+        userDefaults.string(forKey: serverIdentifierKey)
+    }
+
     /// Verify current connection and re-select if needed
     /// Call this on app launch to ensure we have a working server connection
     func verifyAndFixConnection() async {
@@ -733,28 +693,27 @@ class PlexAuthManager: ObservableObject {
             // Try to find a better connection without clearing credentials
             // This allows cached content to still be shown.
             //
-            // Match the saved server by URL first, then by saved name as a
-            // fallback (Plex occasionally rotates a server's connection
-            // URIs, which breaks URL-matching while the name stays stable).
-            // If neither identifies the saved server, leave selection alone
-            // — the prior `?? servers.first` fallback silently swapped users
-            // to whichever server happened to be first in the account's
-            // server list, which on a multi-server account (e.g. own + shared)
-            // could pull them onto the wrong server entirely.
+            // Match the saved server by stable identifier first, URL second,
+            // and display name only if the name is unique. Plex can rotate
+            // connection URIs and users can have duplicate server names, so
+            // falling back to the first name match can silently select the
+            // wrong server on multi-server accounts.
             do {
                 let servers = try await networkManager.getServers(authToken: token)
-                let savedName = savedServerName
-                let matchedServer = servers.first(where: { server in
-                    server.connections?.contains { $0.uri == currentURL } == true
-                }) ?? (savedName.flatMap { name in
-                    servers.first(where: { $0.name == name })
-                })
+                let matchedServer = PlexServerSelectionPolicy.matchingServer(
+                    in: servers,
+                    savedIdentifier: savedServerIdentifier,
+                    savedURL: currentURL,
+                    savedName: savedServerName
+                )
                 if let currentServer = matchedServer {
                     // Try to find a working connection on this server
                     if let workingURL = await findBestConnection(for: currentServer) {
+                        selectedServer = currentServer
                         selectedServerURL = workingURL
                         userDefaults.set(selectedServerURL, forKey: serverURLKey)
                         userDefaults.set(currentServer.name, forKey: serverNameKey)
+                        userDefaults.set(PlexServerSelectionPolicy.stableServerIdentifier(for: currentServer), forKey: serverIdentifierKey)
 
                         // Update server token for new server (securely in Keychain)
                         let tokenForServer = currentServer.accessToken ?? authToken
@@ -792,7 +751,7 @@ class PlexAuthManager: ObservableObject {
     // MARK: - Private Methods
 
     private func providerID(for server: PlexDevice) -> String {
-        "plex:\(server.machineIdentifier ?? server.clientIdentifier)"
+        PlexServerSelectionPolicy.providerID(for: server)
     }
 
     private func registerSelectedServerCredential(_ server: PlexDevice, token: String?) async {
