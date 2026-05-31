@@ -6,6 +6,17 @@ Restructure the Rivulet modernization program around product epics plus a cross-
 
 The target product remains a distinct Plex-backed tvOS client that feels close to the Apple TV app in polish, focus behavior, content presentation, and playback quality without copying Apple branding, trade dress, or private integrations.
 
+## Governing Constraint
+
+The delivery structure in this document is approved and fixed for future planning and implementation decomposition.
+
+This design must not:
+
+- redesign the structure
+- replace epics with phases
+- collapse Epic 0 into a later quality phase
+- expand Epic 5 into SRE, operational support, incident management, runbooks, service ownership matrices, on-call processes, or other backend operational work
+
 ## Why This Design
 
 The earlier roadmap was logically sequenced, but still too phase-oriented:
@@ -77,85 +88,190 @@ It owns:
 - testing
 - performance
 - observability
+- architecture decision records (ADR)
 
-It does not exist to deliver a visible redesign by itself. Its purpose is to define the rules and evidence every other epic must satisfy before closing.
+Epic 0 does not primarily deliver user-facing features.
+
+Its purpose is to define:
+
+- standards
+- budgets
+- acceptance gates
+- validation artifacts
+- evidence requirements
+
+that every other epic must satisfy.
+
+Every epic inherits Epic 0 requirements.
+
+No epic may close without satisfying applicable Epic 0 gates.
 
 ### Epic 1 - Plex Platform Modernisation
 
 Goal: make Plex integration production-grade.
 
-Primary areas:
+Owns:
 
-- authentication and credential handling
-- endpoint classification and adapter boundaries
+- authentication
+- credential handling
+- token lifecycle
+- token transport
+- endpoint classification
+- adapter boundaries
 - JSON-first response strategy
-- legacy endpoint retirement or containment
+- legacy endpoint retirement/containment
 - multi-server correctness
-- home-user correctness
-- watch state and timeline ownership
-- discover/watchlist isolation and graceful degradation
+- Plex Home correctness
+- watch-state ownership
+- timeline ownership
+- discover/watchlist containment
+- provider abstraction completion
+
+Exit gate:
+
+- no token leaks
+- no undocumented endpoint usage without containment
+- all Plex integrations classified and owned
 
 ### Epic 2 - Apple TV Home Experience
 
 Goal: make Rivulet feel Apple TV-like from first launch.
 
-Primary areas:
+Owns:
 
 - hero-first home
-- continue watching prominence and redesign
-- featured and discovery rows
+- continue watching prominence
+- featured rows
+- discovery rows
 - loading, empty, and error states
 - focus normalization
 - Siri Remote behavior
 - sidebar refinement
-- secure Top Shelf integration
+- Top Shelf implementation
+
+Also owns Apple TV parity for:
+
+- Home
+- Navigation
+- Focus
+
+Exit gate:
+
+- launch experience feels premium
+- deterministic focus behavior
+- deterministic top-level navigation
 
 ### Epic 3 - Apple TV Content Experience
 
-Goal: make browsing content feel first-party.
+Goal: make content browsing feel first-party quality.
 
-Primary areas:
+Owns:
 
-- preview transitions and poster expansion
-- metadata reveal and motion refinement
+- preview transitions
+- poster expansion
+- metadata reveal
 - focus restoration
 - detail-page hierarchy
-- unified visual system
-- watchlist/discover presentation
+- visual system
+- watchlist presentation
+- discover presentation
 - universal details
 - more ways to watch
-- trailer support
+- trailer presentation
+
+Also owns Apple TV parity for:
+
+- Detail pages
+- Preview experience
+- Content discovery
+
+Design System Ownership:
+
+Epic 3 owns the canonical Rivulet design language.
+
+Including:
+
+- typography
+- spacing
+- focus treatment
+- materials
+- Liquid Glass usage
+- depth
+- motion
+- poster styles
+- row styles
+- metadata hierarchy
+- sidebar styling
+- detail-page composition
+- preview composition
+
+No new UI patterns should be introduced outside this system once established.
+
+Exit gate:
+
+- poster -> preview -> detail flow is polished and stable
+- visual language is coherent across the application
 
 ### Epic 4 - Playback Excellence
 
 Goal: make playback effectively invisible to the user.
 
-Primary areas:
+Owns:
 
-- AVKit-first and AVPlayerViewController-first policy
+- AVKit-first policy
+- AVPlayerViewController-first policy
 - RPlayer fallback strategy
-- Dolby Vision and HDR capability handling
+- Dolby Vision handling
+- HDR handling
 - subtitle and audio behavior
 - resume/session correctness
-- watch-state correctness
+- session correctness
 - interruption and failure recovery
 - playback telemetry
+
+Also owns Apple TV parity for:
+
+- Playback experience
+- Playback controls
+- Playback transitions
+
+Exit gate:
+
+- playback confidence across direct play, remux, transcode, interruption, and recovery scenarios
 
 ### Epic 5 - Release Readiness and Production Validation
 
 Goal: formal ship/no-ship decision for the tvOS client.
 
-Primary areas:
+Owns:
 
 - full regression validation
 - accessibility validation
-- privacy and ATS validation
+- security validation
+- privacy validation
+- ATS validation
 - performance validation
 - TestFlight validation
 - App Store readiness
-- architecture and testing documentation
+- architecture documentation
+- testing documentation
 - known limitations
 - debt register and risk acceptance decisions
+
+Epic 5 is a client-application release gate.
+
+It does NOT own:
+
+- on-call processes
+- SRE practices
+- incident management
+- service ownership matrices
+- support organizations
+- operational scaling programs
+
+Exit gate:
+
+- explicit documented ship or no-ship decision
 
 ### Optional Epic 6 - Post-Launch Hardening
 
@@ -196,7 +312,7 @@ Epic 1 begins first because auth transport, endpoint containment, multi-server b
 
 Epic 2 becomes the first major user-facing delivery lane.
 
-Epic 4 starts in parallel at the risk-reduction level:
+Epic 4 starts in parallel at the risk-reduction level only:
 
 - route audit
 - AVKit-first policy definition
@@ -215,6 +331,47 @@ That pairing reflects the product reality that poster, preview, detail, availabi
 ### Wave 4 - Ship Gate
 
 Epic 5 becomes the formal production-validation pass after Epics 1 through 4 are functionally complete and have already been satisfying Epic 0 requirements during development.
+
+Optional post-launch work remains outside the core modernization program:
+
+- Epic 6
+
+## Architecture Decision Records
+
+Epic 0 owns ADR governance.
+
+ADR is required for:
+
+- authentication architecture
+- Plex API strategy
+- discover/watchlist strategy
+- playback architecture
+- AVKit decisions
+- RPlayer decisions
+- Top Shelf strategy
+- multi-server strategy
+- major UX architecture decisions
+
+Every ADR must contain:
+
+- context
+- decision
+- alternatives considered
+- consequences
+- owner
+- date
+
+## Quality Rules
+
+- No half-fixes.
+- No workaround presented as a final solution.
+- No silent scope reduction.
+- No feature regression.
+- Root cause analysis before recommendations.
+- Systemic fixes preferred over local patches.
+- Quality, security, privacy, accessibility, testing, and performance are not late-stage activities.
+- They apply from Epic 0 onward.
+- Every recommendation, implementation plan, and future task breakdown must align to this delivery model.
 
 ## Epic Contract Model
 
@@ -241,6 +398,7 @@ Allowed scope:
 - performance budgets
 - accessibility validation structure
 - observability rules
+- ADR governance
 
 Blocked dependencies:
 None. This starts first.
@@ -256,12 +414,17 @@ Make Plex integration safe, classified, and production-grade.
 Allowed scope:
 
 - auth transport
+- credential handling
 - token lifecycle
+- token transport
 - adapter boundaries
 - endpoint inventory and classification
+- JSON-first response strategy
+- legacy endpoint retirement/containment
 - multi-server and home-user correctness
 - timeline and watch-state ownership
 - discover/watchlist containment
+- provider abstraction completion
 
 Blocked dependencies:
 
@@ -283,10 +446,12 @@ Allowed scope:
 - hero-first home
 - row strategy
 - continue watching prominence
+- loading, empty, and error states
 - sidebar refinement
 - focus normalization
 - Siri Remote behavior
 - Top Shelf
+- Apple TV parity for home, navigation, and focus
 
 Blocked dependencies:
 
@@ -304,12 +469,16 @@ Make content browsing, expansion, and selection feel first-party.
 
 Allowed scope:
 
-- preview behavior
+- preview transitions and poster expansion
+- metadata reveal
+- focus restoration
 - detail hierarchy
+- visual system
+- watchlist and discover presentation
 - universal details
-- availability surfaces
-- discover/watchlist presentation
-- motion/material/typography system
+- more ways to watch
+- trailer presentation
+- canonical design-language ownership
 
 Blocked dependencies:
 
@@ -319,6 +488,7 @@ Blocked dependencies:
 Exit gate:
 
 - poster to preview to detail flow is polished, coherent, and stable
+- visual language is coherent across the application
 
 ### Epic 4 Contract
 
@@ -328,11 +498,14 @@ Make playback invisible and trustworthy across the library.
 Allowed scope:
 
 - AVKit-first playback policy
-- fallback rules
+- AVPlayerViewController-first policy
+- RPlayer fallback rules
 - HDR and Dolby Vision handling
+- subtitle and audio behavior
 - resume and session correctness
 - interruption recovery
 - playback telemetry
+- Apple TV parity for playback experience, controls, and transitions
 
 Blocked dependencies:
 
@@ -341,7 +514,7 @@ Blocked dependencies:
 
 Exit gate:
 
-- playback confidence across direct, remux, fallback, and interruption scenarios
+- playback confidence across direct play, remux, transcode, interruption, and recovery scenarios
 
 ### Epic 5 Contract
 
@@ -352,13 +525,25 @@ Allowed scope:
 
 - regression validation
 - accessibility validation
-- security and privacy validation
+- security validation
+- privacy validation
 - ATS audit
 - performance audit
 - TestFlight validation
 - App Store readiness
-- docs and known limitations
+- architecture documentation
+- testing documentation
+- known limitations
 - debt register and risk acceptance
+
+Disallowed scope:
+
+- on-call processes
+- SRE practices
+- incident management
+- service ownership matrices
+- support organizations
+- operational scaling programs
 
 Blocked dependencies:
 
@@ -405,6 +590,7 @@ Epic 0 produces the reusable gates and artifacts inherited by every delivery epi
 - allowed logging model
 - forbidden logging model
 - per-epic evidence expectations
+- ADR register and decision traceability
 
 ### Common Epic Closure Requirements
 
@@ -427,7 +613,9 @@ Epic 5 formalizes the final ship packet:
 - final performance audit
 - TestFlight validation evidence
 - App Store submission readiness
-- architecture, testing, and limitations documentation
+- architecture documentation
+- testing documentation
+- known limitations documentation
 - debt register and explicit risk acceptance decisions
 
 ## Repo-Specific Design Implications
@@ -517,4 +705,3 @@ The roadmap rewrite is successful when:
 - Epic 5 is constrained to ship validation rather than invented operations work
 - the repo’s actual risks are reflected in epic order and wave sequencing
 - later implementation planning can decompose the work into reviewable, non-regressive slices
-
