@@ -143,7 +143,7 @@ actor IPTVProvider: LiveTVProvider {
                     scope.setTag(value: "iptv", key: "component")
                     scope.setTag(value: String(describing: capturedSourceType), key: "source_type")
                     scope.setExtra(value: capturedDisplayName, key: "source_name")
-                    scope.setExtra(value: url.absoluteString, key: "m3u_url")
+                    scope.setExtra(value: SensitiveDataRedactor.redact(url) ?? SensitiveDataRedactor.redactedURLValue, key: "m3u_url")
                 }
             }
             throw error
@@ -197,7 +197,7 @@ actor IPTVProvider: LiveTVProvider {
                     scope.setTag(value: "iptv", key: "component")
                     scope.setTag(value: "epg_fetch", key: "operation")
                     scope.setExtra(value: capturedDisplayName, key: "source_name")
-                    scope.setExtra(value: epgURL.absoluteString, key: "epg_url")
+                    scope.setExtra(value: SensitiveDataRedactor.redact(epgURL) ?? SensitiveDataRedactor.redactedURLValue, key: "epg_url")
                 }
             }
             throw error

@@ -73,7 +73,7 @@ final class PlexWatchlistAPI: PlexWatchlistAPIProtocol, Sendable {
         var request = URLRequest(url: components.url!)
         addPlexHeaders(to: &request)
         request.addValue("application/json", forHTTPHeaderField: "Accept")
-        watchlistAPILog.info("fetchAll URL=\(request.url?.absoluteString ?? "?", privacy: .public)")
+        watchlistAPILog.info("fetchAll URL=\(SensitiveDataRedactor.redact(request.url) ?? "?", privacy: .public)")
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
@@ -157,7 +157,7 @@ final class PlexWatchlistAPI: PlexWatchlistAPIProtocol, Sendable {
         var request = URLRequest(url: components.url!)
         request.httpMethod = "PUT"
         addPlexHeaders(to: &request)
-        watchlistAPILog.info("mutate \(action, privacy: .public) URL=\(request.url?.absoluteString ?? "?", privacy: .public)")
+        watchlistAPILog.info("mutate \(action, privacy: .public) URL=\(SensitiveDataRedactor.redact(request.url) ?? "?", privacy: .public)")
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
@@ -202,7 +202,7 @@ final class PlexWatchlistAPI: PlexWatchlistAPIProtocol, Sendable {
         var request = URLRequest(url: components.url!)
         addPlexHeaders(to: &request)
         request.addValue("application/json", forHTTPHeaderField: "Accept")
-        watchlistAPILog.info("matches type=\(type) URL=\(request.url?.absoluteString ?? "?", privacy: .public)")
+        watchlistAPILog.info("matches type=\(type) URL=\(SensitiveDataRedactor.redact(request.url) ?? "?", privacy: .public)")
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)

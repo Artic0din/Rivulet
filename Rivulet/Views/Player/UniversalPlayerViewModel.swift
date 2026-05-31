@@ -1319,7 +1319,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             SentrySDK.capture(error: error) { scope in
                 scope.setTag(value: "playback", key: "component")
                 scope.setTag(value: "avplayer", key: "player_type")
-                scope.setExtra(value: url.absoluteString, key: "stream_url")
+                scope.setExtra(value: SensitiveDataRedactor.redactedURLValue, key: "stream_url")
                 scope.setExtra(value: self.metadata.title ?? "unknown", key: "media_title")
                 scope.setExtra(value: self.metadata.type ?? "unknown", key: "media_type")
                 scope.setExtra(value: self.metadata.ratingKey ?? "unknown", key: "rating_key")
@@ -2760,11 +2760,11 @@ final class UniversalPlayerViewModel: ObservableObject {
                 await subtitleManager.load(url: candidateURL, headers: headers, format: formatHintForCandidate)
                 if subtitleManager.error == nil {
                     loaded = true
-                    print("🎬 [Subtitles] Loaded subtitle track \(trackId) from \(candidateURL.absoluteString)")
+                    print("🎬 [Subtitles] Loaded subtitle track \(trackId) from \(SensitiveDataRedactor.redact(candidateURL) ?? SensitiveDataRedactor.redactedURLValue)")
                     break
                 }
                 print(
-                    "🎬 [Subtitles] Candidate failed for track \(trackId): \(candidateURL.absoluteString) " +
+                    "🎬 [Subtitles] Candidate failed for track \(trackId): \(SensitiveDataRedactor.redact(candidateURL) ?? SensitiveDataRedactor.redactedURLValue) " +
                     "(\(subtitleManager.error?.localizedDescription ?? "unknown error"))"
                 )
             }

@@ -91,7 +91,7 @@ final class HLSSegmentFetcher {
             SentrySDK.capture(error: error) { scope in
                 scope.setTag(value: "dv_hls_fetcher", key: "component")
                 scope.setTag(value: "missing_init_segment", key: "error_type")
-                scope.setExtra(value: resolvedVariantURL.absoluteString, key: "variant_url")
+                scope.setExtra(value: SensitiveDataRedactor.redactedURLValue, key: "variant_url")
                 scope.setExtra(value: self.segments.count, key: "segment_count")
             }
             throw error
@@ -240,7 +240,7 @@ final class HLSSegmentFetcher {
                 scope.setTag(value: "dv_hls_fetcher", key: "component")
                 scope.setTag(value: "no_variants", key: "error_type")
                 scope.setExtra(value: masterURL.host ?? "unknown", key: "host")
-                scope.setExtra(value: masterURL.absoluteString, key: "master_url")
+                scope.setExtra(value: SensitiveDataRedactor.redactedURLValue, key: "master_url")
             }
             throw error
         }
@@ -352,7 +352,7 @@ enum HLSFetcherError: Error, CustomStringConvertible {
         case .noVariantsFound: return "No variant streams found in master playlist"
         case .missingInitSegment: return "No EXT-X-MAP (init segment) found in variant playlist"
         case .segmentOutOfRange(let idx, let count): return "Segment index \(idx) out of range (0..<\(count))"
-        case .httpError(let code, let url): return "HTTP \(code) fetching \(url.absoluteString)"
+        case .httpError(let code, _): return "HTTP \(code) fetching \(SensitiveDataRedactor.redactedURLValue)"
         case .invalidResponse: return "Invalid HTTP response"
         }
     }

@@ -80,11 +80,12 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             if httpResponse.statusCode != 401 && httpResponse.statusCode != 403 && !(500...599).contains(httpResponse.statusCode) {
                 SentrySDK.capture(error: error) { scope in
                     scope.setTag(value: "plex_network", key: "component")
-                    scope.setExtra(value: url.absoluteString, key: "url")
+                    scope.setExtra(value: SensitiveDataRedactor.redact(url) ?? "unknown", key: "url")
                     scope.setExtra(value: method, key: "method")
                     scope.setExtra(value: httpResponse.statusCode, key: "status_code")
                     if let responseStr = String(data: data, encoding: .utf8) {
-                        scope.setExtra(value: String(responseStr.prefix(500)), key: "response_body")
+                        let snippet = String(responseStr.prefix(500))
+                        scope.setExtra(value: SensitiveDataRedactor.redact(snippet) ?? "", key: "response_body")
                     }
                 }
             }
@@ -97,27 +98,29 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         } catch {
             print("🌐 PlexNetwork: ❌ Decode error: \(error)")
             if let responseStr = String(data: data, encoding: .utf8) {
-                print("🌐 PlexNetwork: Full response: \(responseStr)")
+                let snippet = String(responseStr.prefix(500))
+                print("🌐 PlexNetwork: Response snippet: \(SensitiveDataRedactor.redact(snippet) ?? "")")
             }
 
             // Capture JSON decode errors to Sentry
             SentrySDK.capture(error: error) { scope in
                 scope.setTag(value: "plex_network", key: "component")
                 scope.setTag(value: "json_decode", key: "error_type")
-                scope.setExtra(value: url.absoluteString, key: "url")
+                scope.setExtra(value: SensitiveDataRedactor.redact(url) ?? "unknown", key: "url")
                 scope.setExtra(value: String(describing: T.self), key: "expected_type")
                 scope.setExtra(value: data.count, key: "response_size")
 
                 // Try UTF-8 first, fall back to Latin1 (which never fails) to capture something
                 if let responseStr = String(data: data, encoding: .utf8) {
-                    scope.setExtra(value: String(responseStr.prefix(2000)), key: "response_body")
+                    let snippet = String(responseStr.prefix(2000))
+                    scope.setExtra(value: SensitiveDataRedactor.redact(snippet) ?? "", key: "response_body")
                 } else {
                     // UTF-8 failed - capture what we can
                     scope.setTag(value: "true", key: "invalid_utf8")
 
                     // Latin1 encoding never fails - use it to get a lossy representation
                     if let latin1Str = String(data: data.prefix(2000), encoding: .isoLatin1) {
-                        scope.setExtra(value: latin1Str, key: "response_body_latin1")
+                        scope.setExtra(value: SensitiveDataRedactor.redact(latin1Str) ?? "", key: "response_body_latin1")
                     }
 
                     // Try to find the error position from the underlying error
@@ -135,7 +138,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
                         // Also capture as Latin1 string for context
                         if let contextStr = String(data: Data(problemArea), encoding: .isoLatin1) {
-                            scope.setExtra(value: contextStr, key: "context_around_error")
+                            scope.setExtra(value: SensitiveDataRedactor.redact(contextStr) ?? "", key: "context_around_error")
                         }
                     }
                 }

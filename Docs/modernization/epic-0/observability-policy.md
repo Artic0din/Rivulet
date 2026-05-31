@@ -114,6 +114,30 @@ Playback failed url=https://server:32400/video/...&X-Plex-Token=abcd1234
 - raw headers
 - raw server URL if it adds no essential diagnostic value
 
+### Current Configuration Baseline
+
+As of Epic 1 PR 2:
+
+- Sentry startup is compiled only for non-Debug builds in `Rivulet/RivuletApp.swift`.
+- The DSN is provided by ignored local file `Rivulet/Config/Secrets.swift` via `Secrets.sentryDSN`.
+- The tracked `Rivulet/Config/Secrets.swift.template` contains only the placeholder `YOUR_SENTRY_DSN_HERE`.
+- This workspace does not contain a local `Secrets.swift`, so current Debug validation does not report to Sentry.
+- A copied Release DSN could report to an inherited project unless Project Owner confirms Sentry project ownership or explicitly disables Release startup before release validation.
+- PR 2 disables Sentry automatic failed-request capture, automatic network breadcrumbs, and automatic network tracking to avoid SDK-captured raw URL/header leakage.
+- PR 2 adds `beforeSend` sanitization for event tags, extras, contexts, breadcrumbs, exceptions, messages, request URLs, query strings, and request headers.
+
+### Shared Redaction Utility
+
+Application code must use `SensitiveDataRedactor` for any diagnostic field that may contain a token, credential, PIN, auth header, query-token URL, stream URL, media asset URL, Discover/provider URL, PMS transcode URL, playback decision URL, or Top Shelf image URL.
+
+The redactor supports:
+
+- raw strings
+- `URL`
+- `URLComponents`
+- string header dictionaries
+- nested metadata dictionaries and arrays used by Sentry extras, event contexts, or breadcrumb data
+
 ## Review Requirements
 
 Any change that adds or modifies:

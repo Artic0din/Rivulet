@@ -681,7 +681,7 @@ class PlexAuthManager: ObservableObject {
                 SentrySDK.capture(error: error) { scope in
                     scope.setTag(value: "plex_auth", key: "component")
                     scope.setTag(value: "connection_verify", key: "auth_step")
-                    scope.setExtra(value: currentURL, key: "failed_url")
+                    scope.setExtra(value: SensitiveDataRedactor.redactedURLValue, key: "failed_url")
                 }
             }
         }
