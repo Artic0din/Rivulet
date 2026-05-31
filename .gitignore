@@ -72,7 +72,13 @@ ffmpeg/
 Rivulet/Config/Secrets.swift
 
 # Internal developer docs — kept locally, not in the repo.
-Docs/
+# Re-include the governed modernization and ADR packages so approved
+# documentation artifacts can be tracked.
+Docs/*
+!Docs/modernization/
+!Docs/modernization/**
+!Docs/adr/
+!Docs/adr/**
 
 # Playwright MCP session scratch (browser snapshots, traces, etc.)
 .playwright-mcp/
