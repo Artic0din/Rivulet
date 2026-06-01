@@ -980,3 +980,16 @@ data.
 | E3-PR10-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `ScheduleLabelPolicyTests` (9) + `EpisodeCardPresentationTests` (6): label priority/thresholds/negative-days, air-date parse, model runtime/progress/fallback, accessibility labels | `xcodebuild … -only-testing:…` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure-logic coverage |
 | E3-PR10-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
 | E3-PR10-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `EpisodePresentationPolicy.swift` (new), `EpisodeContentCard.swift` (new) + test + audit doc; no playback/watch-state/timeline/provider/Epic 1 change | working-tree diff + scope scans | Reviewed | Pending | Display-only; additive card |
+
+## Epic 3 PR 11 Evidence Entries (Cast/Crew Images + Accessibility)
+
+E3-PR11 adds the pure cast presentation helpers and wires combined VoiceOver +
+initials fallback into the existing (already image-loading) `PersonCard`.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E3-PR11-AUDIT-001 | Content Presentation | 2026-06-01 | Epic 3 owner | `PersonCard` already loads real cast images via safe `CachedAsyncImage` with token handling; gaps were generic-icon fallback + no combined VoiceOver label | `Docs/modernization/epic-3/E3-PR11-cast-images.md` | Reviewed | Pending | No new provider |
+| E3-PR11-POLICY-001 | Accessibility | 2026-06-01 | Epic 3 owner | Pure `CastImagePresentation`: `accessibilityLabel(name:role:)` + `initials(from:)`; `PersonCard` now one combined VoiceOver element + initials image-failure fallback | `Rivulet/Views/Media/CastImagePresentation.swift`, `Rivulet/Views/Media/CastMemberCard.swift` | Gate Satisfying | Pending | Leaf-component additive change |
+| E3-PR11-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `CastImagePresentationTests` (6): label with/without role, initials (single/two/three-capped/empty) | `xcodebuild … -only-testing:RivuletTests/CastImagePresentationTests` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure-logic coverage |
+| E3-PR11-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+| E3-PR11-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `CastImagePresentation.swift` (new), `CastMemberCard.swift` (a11y label + initials fallback) + test + audit doc; no provider/token-transport/playback change | working-tree diff + scope scans | Reviewed | Pending | Plex remains image source |

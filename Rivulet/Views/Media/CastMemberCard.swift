@@ -44,6 +44,9 @@ struct PersonCard: View {
             }
             .frame(width: circleSize + 20)
         }
+        // E3-PR11: one combined VoiceOver element exposing name + role.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(CastImagePresentation.accessibilityLabel(name: name, role: subtitle))
     }
 
     // MARK: - Person Image
@@ -72,9 +75,10 @@ struct PersonCard: View {
                         )
                     )
                     .overlay {
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 40, weight: .light))
-                            .foregroundStyle(.white.opacity(0.3))
+                        // E3-PR11: initials fallback instead of a generic icon.
+                        Text(CastImagePresentation.initials(from: name))
+                            .font(.system(size: 44, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.65))
                     }
             }
         }
