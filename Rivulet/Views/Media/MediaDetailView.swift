@@ -2331,8 +2331,9 @@ struct MediaDetailView: View {
         default: return // status labels are show/movie-level on detail
         }
         guard let status = await TMDBDiscoverService.shared.fetchStatusDetail(tmdbId: tmdbId, type: type) else { return }
-        let input = TMDBContentStatus.input(from: status, kind: kind)
-        guard let label = ContentStatusPolicy.classify(input, reference: Date()),
+        let now = Date()
+        let input = TMDBContentStatus.input(from: status, kind: kind, reference: now)
+        guard let label = ContentStatusPolicy.classify(input, reference: now),
               ContentStatusPlacement.allows(label, on: .detail) else { return }
         contentStatusLabel = label
     }

@@ -23,7 +23,8 @@ nonisolated enum TMDBContentStatus {
     /// nil so the hero never shows a noisy generic "Recently Added" chip.
     static func input(
         from detail: TMDBStatusDetail,
-        kind: ContentStatusKind
+        kind: ContentStatusKind,
+        reference: Date
     ) -> ContentStatusInput {
         switch kind {
         case .movie:
@@ -36,16 +37,32 @@ nonisolated enum TMDBContentStatus {
         case .show, .season, .episode:
             let firstAir = ContentStatusPolicy.parseAirDate(detail.firstAirDate)
             let nextAir = ContentStatusPolicy.parseAirDate(detail.nextEpisodeToAir?.airDate)
-            let nextIsSeasonStart = (detail.nextEpisodeToAir?.episodeNumber == 1)
+            let lastAir = ContentStatusPolicy.parseAirDate(detail.lastEpisodeToAir?.airDate ?? detail.lastAirDate)
+            // A season premiere only counts as such for real seasons (>= 1);
+            // TMDb "specials" live in season 0 and must not read as a new season.
+            let nextSeasonNumber = detail.nextEpisodeToAir?.seasonNumber ?? 1
+            let nextIsSeasonStart = (detail.nextEpisodeToAir?.episodeNumber == 1) && nextSeasonNumber >= 1
             let hasAired = detail.lastAirDate != nil || detail.lastEpisodeToAir != nil
 
             // Premiere: the series itself has not aired yet.
             let premiere: Date? = (!hasAired) ? firstAir : nil
-            // New season: next episode is episode 1 of a season (and the series
-            // has already aired at least once).
+            // New season: next episode is episode 1 of a real season.
             let newSeason: Date? = (hasAired && nextIsSeasonStart) ? nextAir : nil
-            // Returns: a returning series with an upcoming non-premiere episode.
-            let returns: Date? = (hasAired && !nextIsSeasonStart && isReturning(detail.status)) ? nextAir : nil
+
+            // Mid-season upcoming episode: distinguish a currently-airing weekly
+            // show (small gap since the last episode → "New Episode Every <day>")
+            // from a show returning after a long break (→ "Returns <date>").
+            var weekly: Weekday? = nil
+            var returns: Date? = nil
+            if hasAired, !nextIsSeasonStart, let next = nextAir, next > reference {
+                let gapDays = lastAir.map { Int(next.timeIntervalSince($0) / 86_400) }
+                if let gap = gapDays, gap >= 0, gap <= weeklyCadenceMaxGapDays {
+                    weekly = weekday(of: next)
+                } else if isReturning(detail.status) {
+                    returns = next
+                }
+            }
+
             // Complete: ended/cancelled and no longer in production → all episodes available.
             let complete: Bool? = (isEnded(detail.status) && detail.inProduction != true) ? true : nil
 
@@ -54,9 +71,21 @@ nonisolated enum TMDBContentStatus {
                 seriesIsComplete: complete,
                 premiereDate: premiere,
                 returnDate: returns,
-                newSeasonDate: newSeason
+                newSeasonDate: newSeason,
+                weeklyReleaseDay: weekly
             )
         }
+    }
+
+    /// Largest last→next-episode gap (days) still treated as a weekly cadence.
+    /// A fortnight of slack tolerates skipped weeks / scheduling drift.
+    private static let weeklyCadenceMaxGapDays = 14
+
+    /// Weekday of a date in UTC (air dates are UTC calendar days).
+    private static func weekday(of date: Date) -> Weekday? {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC") ?? cal.timeZone
+        return Weekday(rawValue: cal.component(.weekday, from: date))
     }
 
     /// Maps a Plex `type` string to the status kind.

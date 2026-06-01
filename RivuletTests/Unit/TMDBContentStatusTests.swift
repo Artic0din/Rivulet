@@ -64,15 +64,49 @@ final class TMDBContentStatusTests: XCTestCase {
     // MARK: - Mapping → ContentStatusInput → classify
 
     private func classify(_ detail: TMDBStatusDetail, kind: ContentStatusKind) -> ContentStatusLabel? {
-        ContentStatusPolicy.classify(TMDBContentStatus.input(from: detail, kind: kind), reference: ref)
+        ContentStatusPolicy.classify(TMDBContentStatus.input(from: detail, kind: kind, reference: ref), reference: ref)
     }
 
-    func testReturningSeriesWithUpcomingMidSeasonEpisodeReturns() {
+    func testReturningAfterLongBreakReturns() {
+        // Large gap (months) since the last episode → "Returns <date>".
         let d = TMDBStatusDetail(
             status: "Returning Series", lastAirDate: past,
             nextEpisodeToAir: .init(airDate: future, seasonNumber: 5, episodeNumber: 3)
         )
         XCTAssertEqual(classify(d, kind: .show), .returns(ContentStatusPolicy.parseAirDate(future)!))
+    }
+
+    func testActivelyAiringWeeklyShowShowsWeeklyCadence() {
+        // Last episode ~1 week before the upcoming one → "New Episode Every <day>".
+        let last = "2026-06-04"   // after ref (2026-06-01) is fine; gap is last→next
+        let next = "2026-06-11"   // Thursday, 7 days later, mid-season
+        let d = TMDBStatusDetail(
+            status: "Returning Series",
+            nextEpisodeToAir: .init(airDate: next, seasonNumber: 5, episodeNumber: 5),
+            lastEpisodeToAir: .init(airDate: last, seasonNumber: 5, episodeNumber: 4)
+        )
+        let label = classify(d, kind: .show)
+        guard case .newEpisodeWeekly = label else {
+            return XCTFail("expected weekly cadence, got \(String(describing: label))")
+        }
+    }
+
+    func testStaleNextEpisodeProducesNoWeeklyLabel() {
+        // Next episode already in the past → neither weekly nor returns.
+        let d = TMDBStatusDetail(
+            status: "Returning Series", lastAirDate: "2025-12-01",
+            nextEpisodeToAir: .init(airDate: "2025-12-08", seasonNumber: 5, episodeNumber: 5)
+        )
+        XCTAssertNil(classify(d, kind: .show))
+    }
+
+    func testSeasonZeroSpecialDoesNotReadAsNewSeason() {
+        // A special (season 0, ep 1) must NOT be labelled a new season.
+        let d = TMDBStatusDetail(
+            status: "Returning Series", lastAirDate: past,
+            nextEpisodeToAir: .init(airDate: future, seasonNumber: 0, episodeNumber: 1)
+        )
+        XCTAssertNotEqual(classify(d, kind: .show), .newSeason(ContentStatusPolicy.parseAirDate(future)!))
     }
 
     func testUpcomingSeasonPremiereIsNewSeason() {

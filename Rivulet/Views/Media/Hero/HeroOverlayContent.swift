@@ -211,8 +211,9 @@ struct HeroOverlayContent: View {
         let kind = TMDBContentStatus.kind(fromPlexType: item.type)
         let type: TMDBMediaType = (item.type == "movie") ? .movie : .tv
         guard let detail = await TMDBDiscoverService.shared.fetchStatusDetail(tmdbId: tmdbId, type: type) else { return }
-        let input = TMDBContentStatus.input(from: detail, kind: kind)
-        guard let label = ContentStatusPolicy.classify(input, reference: Date()),
+        let now = Date()
+        let input = TMDBContentStatus.input(from: detail, kind: kind, reference: now)
+        guard let label = ContentStatusPolicy.classify(input, reference: now),
               ContentStatusPlacement.allows(label, on: .hero) else { return }
         statusLabels[key] = label
     }
