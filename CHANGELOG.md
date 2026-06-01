@@ -15,6 +15,7 @@
 
 ### Internal (no user-facing change)
 
+- Epic 3 PR7: added landscape and poster→landscape-on-focus content card components (`LandscapeContentCard`) driven by the presentation policies — lower-left logo/title overlay, info line, technical badges, graceful artwork/logo fallback, Reduce Motion support, and a combined VoiceOver label. Additive for now; production row adoption is tracked as debt.
 - Epic 3 PR6: added the Content Presentation System policy layer — a centralized, tested `ContentPresentationStyle` model plus pure policies for title/artwork fallback, runtime, content rating, technical-badge selection (resolution → video → audio), and the canonical metadata hierarchy. Foundation for the content card modes; no visual change yet.
 - Epic 3 PR5: Discover now shows a calm loading and empty state instead of a blank page when no recommendations have loaded yet. Watchlist feedback is unchanged.
 - Epic 3 PR4: detail-page hero metadata now renders in a deterministic, tested order (type → genres → year · duration) via `DetailMetadataCascade`. Behavior-identical; ordering is no longer scattered inline. No visual change.

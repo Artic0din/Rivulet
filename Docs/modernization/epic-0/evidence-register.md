@@ -928,3 +928,19 @@ E3-PR6 adds the pure, tested Content Presentation System policy layer per the
 | E3-PR6-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `ContentPresentationPolicyTests` (17): style degrade, title/artwork fallback order, runtime/rating formatting, badge order + priority pick, hierarchy assembly + nil-filtering | `xcodebuild … -only-testing:RivuletTests/ContentPresentationPolicyTests` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure-logic coverage |
 | E3-PR6-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
 | E3-PR6-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `ContentPresentationPolicy.swift` (new) + test + design-doc extension; no view rendering change yet (E3-PR7), no playback/Epic 1/project-setting/rename | working-tree diff + scope scans | Reviewed | Pending | Policy foundation only |
+
+## Epic 3 PR 7 Evidence Entries (Card Presentation Modes)
+
+E3-PR7 implements production-ready landscape + poster→landscape-on-focus card
+components consuming the E3-PR6 policies. Additive; broad row adoption deferred
+with `DEBT-E3-PR7-001`.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E3-PR7-CARD-001 | Content Presentation | 2026-06-01 | Epic 3 owner | `LandscapeContentCard` renders artwork+title+info+badges via E3-PR6 policies; `.landscape`/`.poster`/`.posterExpandsToLandscape` styles; token focus emphasis; graceful logo/artwork fallback; `#Preview` | `Rivulet/Views/Media/LandscapeContentCard.swift` | Gate Satisfying | Pending | Production-ready style; additive |
+| E3-PR7-MOTION-001 | Accessibility | 2026-06-01 | Epic 3 owner | Focus emphasis gated by Reduce Motion via `PreviewMotionPolicy.animation` (instant when reduced); no focus-time network fetch (artwork URLs passed in resolved) | `Rivulet/Views/Media/LandscapeContentCard.swift` | Reviewed | Pending | PERF: no focus-movement fetch |
+| E3-PR7-A11Y-001 | Accessibility | 2026-06-01 | Epic 3 owner | Combined VoiceOver label via pure `ContentCardAccessibility.label`; `.isButton` trait; `ContentCardAccessibilityTests` (4) | `Rivulet/Views/Media/LandscapeContentCard.swift`, `RivuletTests/Unit/ContentCardAccessibilityTests.swift` | Gate Satisfying | Pending | One element, deterministic order |
+| E3-PR7-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `ContentCardAccessibilityTests` (4) + `ContentPresentationPolicyTests` (17) pass | `xcodebuild … -only-testing:…` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure-logic coverage (view exercised via #Preview) |
+| E3-PR7-DEBT-001 | Boundary/Debt | 2026-06-01 | Epic 3 owner | `DEBT-E3-PR7-001`: card is additive, broad row adoption + on-device validation deferred; cannot regress (not wired in) | `Docs/modernization/epic-0/debt-register.md` | Reviewed | Pending | Honest deferral per acceptance §20.7 |
+| E3-PR7-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+| E3-PR7-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `LandscapeContentCard.swift` (new) + test + audit doc + debt entry; no existing card/row replaced; no playback/Epic 1/project-setting/rename | working-tree diff + scope scans | Reviewed | Pending | Purely additive |
