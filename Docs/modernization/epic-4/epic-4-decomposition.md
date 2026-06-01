@@ -127,14 +127,22 @@ net-new slice:
   token-safe); native chapters via `AVPlayerItem.navigationMarkerGroups`
   (`includeChapters=1`); native transport / Siri Remote / Now Playing / PiP on the
   `AVPlayerViewController` path; contextual Skip via `contextualActions`.
-- **New slice — E4-PR9 (Post-play UX standardization):** standardize + verify the
-  existing custom post-play overlay (`Views/Player/PostVideo/`) against Apple's
-  content-proposal *model* — cross-player (RPlayer + AVKit), artwork/title/Play-
-  Next/Back, **no surprise autoplay** (countdown cancellable/setting-gated),
-  related-for-movies via Plex `includeRelated`, watch-state updated before the
-  proposal (Epic 1 consume-only). **Do NOT** migrate to `AVContentProposal`
-  (AVKit-path only → cross-player fragmentation). No corpus/device dependency for
-  the logic; on-device UX verification before close. Tracked `DEBT-E4-AVKIT-001`.
+- **New slice — E4-PR9 (Native post-play / content proposals):** build a **shared,
+  Plex-powered post-play decision layer** (pure, tested) and **two presenters** —
+  native `AVContentProposal` + `AVContentProposalViewController` on the AVKit
+  (default/majority under AVKit-first) path via `AVPlayerViewControllerDelegate`
+  (`shouldPresent`/`didAccept`/`didReject`, `preferredPlayerViewFrame`), and the
+  existing `Views/Player/PostVideo/` overlay reused as the RPlayer-path presenter.
+  This **replaces** the current custom-overlay-over-native deviation with the
+  first-party UX on the path most content uses. Rules: artwork/title/S·E,
+  Play-Next/Replay/Back, **no surprise autoplay** (auto-accept/countdown
+  cancellable/setting-gated), related-for-movies via Plex `includeRelated`,
+  watch-state updated before the proposal (Epic 1 consume-only). Also scope the
+  full-screen / PiP / resume-after-navigation delegate hooks. On-device UX
+  verification before close. Tracked `DEBT-E4-AVKIT-001`. *(Correction: an earlier
+  draft recommended "keep the custom overlay, do not adopt `AVContentProposal`" —
+  that wrongly optimised for the RPlayer minority path and entrenched a non-native
+  overlay on the default path.)*
 - **Backlog (optional, minor):** AVKit metadata enrichment (precise release date,
   dedicated season/episode identifiers); Plex `includeRelated` adoption for
   post-play related rows. Tracked `DEBT-E4-AVKIT-001`.

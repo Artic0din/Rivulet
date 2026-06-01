@@ -64,27 +64,32 @@ the correct HIG posture:
 | Native chapters | ✅ `navigationMarkerGroups` (§6) |
 
 **Deviations:** (a) the post-play / next-up experience is a **custom SwiftUI
-overlay** (`PostVideoSummaryView`) presented in `UniversalPlayerView`, not AVKit
-content proposals — deliberate, so it works identically on the RPlayer path (§4);
-(b) the RPlayer path is fully custom (unavoidable). No unnecessary custom overlays
-sit on the native player.
+overlay** (`PostVideoSummaryView`) drawn **over** the native `AVPlayerViewController`
+— this is itself a **non-native deviation**: Apple's model is `AVContentProposal`,
+where the *system* shrinks the video and presents the proposal with native focus /
+Siri-Remote / auto-accept (§4). Under the now-ratified AVKit-first policy the
+AVPlayer path is the default/majority, so the native proposal is the correct
+primary presenter, not the custom overlay. (b) The RPlayer path is fully custom
+(unavoidable). Correcting (a) is the substance of §4.
 
 ---
 
 ## 3. AVPlayerViewControllerDelegate opportunities
 
-`NativePlayerViewController` currently sets **no delegate**. Public hooks worth
-considering (AVKit-path only — none would apply to RPlayer):
+`NativePlayerViewController` currently sets **no delegate** — a real gap, not a
+non-issue. Setting `AVPlayerViewControllerDelegate` is **required** to deliver the
+native post-play UX on the AVKit (default/majority) path:
 
 | Delegate use | Opportunity | Recommendation |
 | --- | --- | --- |
-| Content proposals (`shouldPresent`/`didAccept`/`didReject`) | Native next-episode proposal | **Do not adopt as the primary** — it only works on the AVPlayer path and would fragment post-play across the two players. Keep the cross-player custom overlay (§4). Optional later: native proposal on the AVKit path only. |
-| Full-screen / transition (`willBeginFullScreenPresentation`/`willEndFull…`) | Coordinate dismissal/focus | Low priority; current dismissal works. |
-| Picture in Picture delegate hooks | PiP restore | Future; not requested. |
-| `willResumePlaybackAfterUserNavigatedFromTime` etc. | Resume after seek/skip | Covered by existing logic; not needed now. |
+| Content proposals (`playerViewController(_:shouldPresent:)` / `(_:didAccept:)` / `(_:didReject:)`) | Native next-episode / next-up proposal — system shrinks video to `preferredPlayerViewFrame`, native focus + Siri Remote + auto-accept interval | **Adopt on the AVKit path** (the default under AVKit-first). Set `AVPlayerItem.nextContentProposal`, implement the delegate, present an `AVContentProposalViewController`. Share the *decision/data* with the RPlayer overlay (§4) — one decision, two presenters. |
+| Full-screen / transition (`willBeginFullScreenPresentation` / `willEnd…`) | Coordinate dismissal, focus return, backdrop | **Evaluate in the post-play slice** — needed for clean proposal→dismiss / focus handoff, not "low priority". |
+| Picture in Picture delegate hooks | PiP start/stop + UI restore | **Evaluate** (AVPlayerViewController gives PiP for free; restore needs the delegate). Scope explicitly, don't hand-wave. |
+| `playerViewController(_:willResumePlaybackAfterUserNavigatedFromTime:to:)` | Resume coordination after scrub/skip/proposal navigation | **Evaluate** alongside the E4-PR4 resume policy wiring. |
 
-Conclusion: no delegate work is required for parity. A delegate is only needed if
-a native AVKit-path content proposal is later desired as an enhancement.
+Conclusion: delegate work **is** in scope — at minimum the content-proposal hooks
+for native post-play on the AVKit path; full-screen/PiP/resume hooks are to be
+scoped in the post-play slice, not dismissed.
 
 ---
 
@@ -99,26 +104,39 @@ detection in `UniversalPlayerViewModel` (`postVideoState`,
 
 Apple reference (verified): `AVContentProposal` → `AVPlayerItem.nextContentProposal`
 → `AVContentProposalViewController` (override `preferredPlayerViewFrame` to shrink
-the video) + delegate accept/reject. Rivulet's equivalent is powered by Plex data,
-not AVKit, by design.
+the video) + delegate accept/reject. The system presents it over the playing
+video with native focus/Siri-Remote behaviour and an optional auto-accept
+interval.
 
-To audit/standardize (a candidate Epic 4 slice — not a rebuild):
+**Corrected target architecture (one decision, two presenters):**
 
-- Episodes: propose next episode (artwork, title, S/E metadata), Play Next, Back/
-  Dismiss; **no surprise autoplay** — verify the `CountdownRing` auto-advance is
-  user-cancellable and/or gated by a setting; **update watch-state before the
-  proposal** where appropriate (Epic 1 boundary respected).
-- Movies: propose **More Like This / related** (Plex `includeRelated` similar/
-  director hubs) + Replay + Back; avoid a fake "next".
+- A **shared, Plex-powered post-play decision layer** (pure, testable) resolves
+  *what* to propose and *when*: next episode (on-deck / next chronological),
+  related for movies (`includeRelated` similar/director hubs), artwork, titles,
+  S/E metadata, Play-Next vs Replay, and whether to auto-advance. This layer is
+  player-agnostic.
+- **AVKit path (default/majority under AVKit-first): native presentation.** Set
+  `AVPlayerItem.nextContentProposal`, implement the delegate, present an
+  `AVContentProposalViewController` (system shrinks the video). This is the
+  first-party UX and removes the current custom-overlay-over-native deviation.
+- **RPlayer path (fallback): the existing custom overlay**, fed by the *same*
+  decision layer, since native proposals aren't available there.
 
-Plex data to use (all already available): on-deck / next episode, `includeRelated`
-similar hubs, watched/progress, `ratingKey`, grandparent/parent metadata, artwork,
+Behaviour rules (both presenters): episodes → next episode (artwork/title/S·E),
+Play Next, Back/Dismiss, **no surprise autoplay** (auto-accept/countdown must be
+cancellable and/or setting-gated), **update watch-state before the proposal**
+(Epic 1 consume-only); movies → More Like This / Replay / Back, no fake "next".
+
+Plex data (all available): on-deck / next episode, `includeRelated` hubs,
+watched/progress, `ratingKey`, grandparent/parent metadata, artwork,
 duration/`viewOffset`.
 
-**Recommendation:** YES — a dedicated Epic 4 slice to *standardize + verify*
-post-play (cross-player, no-surprise-autoplay, related-for-movies), reusing the
-existing components. Do **not** migrate to `AVContentProposal` (cross-player
-fragmentation).
+**Recommendation:** YES — a dedicated Epic 4 slice. It is **not** "keep the custom
+overlay everywhere": it builds the shared decision layer + adopts the **native
+`AVContentProposal`** on the AVKit path and reuses the overlay only as the RPlayer
+presenter. (My earlier "do not migrate to `AVContentProposal`" was wrong — it
+optimised for the RPlayer minority path and entrenched a non-native overlay on the
+default path.)
 
 ---
 
@@ -215,15 +233,17 @@ individually machine-rendered this pass.)
 | Candidate | Decision |
 | --- | --- |
 | AVKit metadata population | **Already done** (§5). Optional tiny enrichment (release date, S/E identifiers) → backlog, not a slice. |
-| Content proposals / post-play | **New slice recommended** — *standardize + verify* the existing custom overlay (cross-player, no-surprise-autoplay, related-for-movies via `includeRelated`, watch-state-before-proposal). NOT an `AVContentProposal` rebuild. |
+| Content proposals / post-play | **New slice (E4-PR9)** — build a shared Plex post-play decision layer + adopt **native `AVContentProposal`** on the AVKit (default) path via `AVPlayerViewControllerDelegate`, and reuse the existing overlay as the RPlayer presenter. Replaces the current custom-overlay-over-native deviation. No-surprise-autoplay, related-for-movies via `includeRelated`, watch-state-before-proposal. |
 | Native chapter markers | **Already done natively** (§6). No slice (device-verify only). |
 | Player GUI conformity | **Already conformant** (§2). No slice (device-verify only). |
 | Plex metadata wiring | **Already wired** (§7). No slice. |
 | Subtitle/audio UI parity | Stays **E4-PR7** (existing plan). |
 
-Net: the audit confirms most AVKit-reference items are **already implemented
-natively**. The one genuinely new candidate is a **post-play UX standardization
-slice**; everything else is verify-on-device or existing planned slices.
+Net: metadata, chapters, and the native GUI are already native (device-verify
+only). The genuinely new build is **E4-PR9 — native post-play** (shared decision
+layer + `AVContentProposal` on the AVKit path + delegate + RPlayer overlay reuse),
+which also fixes a real native deviation (custom overlay over the native player).
+This is a build, not just a "verify".
 
 ---
 
