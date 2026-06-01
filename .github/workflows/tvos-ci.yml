@@ -1,0 +1,76 @@
+name: tvOS CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Rivulet
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache SwiftPM and Xcode package artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData/SourcePackages
+          key: ${{ runner.os }}-xcode-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-spm-
+
+      - name: Prepare CI secrets placeholder
+        run: |
+          set -euo pipefail
+          cp Rivulet/Config/Secrets.swift.template Rivulet/Config/Secrets.swift
+
+      - name: Build for tvOS simulator
+        run: |
+          set -euo pipefail
+          xcodebuild -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' build
+
+  targeted-tests:
+    name: Targeted Rivulet tests
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache SwiftPM and Xcode package artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData/SourcePackages
+          key: ${{ runner.os }}-xcode-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-spm-
+
+      - name: Prepare CI secrets placeholder
+        run: |
+          set -euo pipefail
+          cp Rivulet/Config/Secrets.swift.template Rivulet/Config/Secrets.swift
+
+      - name: Run targeted platform tests
+        run: |
+          set -euo pipefail
+          xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' \
+            -only-testing:RivuletTests/CredentialRegistryTests \
+            -only-testing:RivuletTests/SensitiveDataRedactorTests \
+            -only-testing:RivuletTests/PlexAuthManagerTests \
+            -only-testing:RivuletTests/PlexNetworkManagerURLTests \
+            -only-testing:RivuletTests/PlexWatchlistServiceTests
