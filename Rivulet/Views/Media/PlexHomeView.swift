@@ -62,25 +62,23 @@ struct PlexHomeView: View {
     ///   `/hubs/continueWatching` endpoint, matching the Plex app exactly)
     /// - Other hubs come from library-specific endpoints with library name prefixes
     private func computeProcessedHubs(from hubsToProcess: [PlexHub]) -> [PlexHub] {
-        var result: [PlexHub] = []
-
-        if let hub = dataStore.continueWatchingHub, hub.Metadata?.isEmpty == false {
-            result.append(hub)
-        }
-
-        // Add "Recently Added" hub for each library shown on Home (video and music)
+        // "Recently Added" hub for each library shown on Home (video and music).
+        var followingRows: [PlexHub] = []
         for library in dataStore.librariesForHomeScreen {
             if let hubs = dataStore.libraryHubs[library.key] {
-                // Find the "Recently Added" hub for this library
                 if let recentlyAddedHub = hubs.first(where: { isRecentlyAddedHub($0) }) {
                     var transformedHub = recentlyAddedHub
                     transformedHub.title = "Recently Added \(library.title)"
-                    result.append(transformedHub)
+                    followingRows.append(transformedHub)
                 }
             }
         }
 
-        return result
+        // Continue Watching is always the most prominent content row (E2-PR5).
+        return HomeRowOrderingPolicy.order(
+            continueWatching: dataStore.continueWatchingHub,
+            followingRows: followingRows
+        )
     }
 
     /// Check if a hub is a Continue Watching or On Deck hub

@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Epic 2 PR5: Continue Watching is now pinned as the most prominent Home content row, and its cards expose a full VoiceOver description (title, episode, time remaining, progress).
 - Epic 2 PR4: Home is now hero-first — a large cinematic hero leads the Home screen by default, favouring Continue Watching, then featured and recently added content, with Play / More Info actions. (Can still be turned off in settings.)
 
 ### Security

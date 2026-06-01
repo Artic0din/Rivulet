@@ -788,3 +788,16 @@ deterministic focus, and reduced-motion support. Scope: hero only.
 | E2-PR4-REGRESS-001 | Testing/Regression | 2026-06-01 | Epic 2 owner | Full E2 + Epic 1 suites pass (57 cases): Focus*, RenderState, HomePerformance, TopShelfPayloadSafety, PlexProviderBoundary | `xcodebuild … -only-testing:…` | Reviewed | Pending | No E2-PR1/2/3 or Epic 1 regression |
 | E2-PR4-BUILD-001 | Testing/Build | 2026-06-01 | Epic 2 owner | tvOS build succeeded (exit 0); `git diff --check` clean | `xcodebuild -quiet -scheme Rivulet -destination 'platform=tvOS Simulator,id=F8288707-280A-4C5F-94AA-24B706E66909' build` | Reviewed | Pending | Pre-existing warnings only |
 | E2-PR4-SCOPE-001 | Boundary | 2026-06-01 | Epic 2 owner | Diff limited to `PlexHomeView.swift`, `HeroOverlayContent.swift`, `HeroSelectionPolicy.swift` (new) + tests; no Sidebar/Detail/Preview/Playback/TopShelf/Continue-Watching-row/Epic 1 change | working-tree diff + scope scans | Reviewed | Pending | No Epic 1 boundary touched |
+
+## Epic 2 PR 5 Evidence Entries
+
+E2-PR5 (Continue Watching prominence). Locks CW as the most prominent content row
+behind a pure tested policy and adds the missing VoiceOver label on the CW card.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E2-PR5-POLICY-001 | Home | 2026-06-01 | Epic 2 owner | Pure `HomeRowOrderingPolicy`: Continue Watching pinned first (when non-empty), following rows preserved; `computeProcessedHubs` delegates to it | `Rivulet/Services/MediaProvider/HomeRowOrderingPolicy.swift`, `Rivulet/Views/Media/PlexHomeView.swift` | Gate Satisfying | Pending | Behavior-preserving; locks prominence |
+| E2-PR5-A11Y-001 | Accessibility | 2026-06-01 | Epic 2 owner | A11Y-004: CW card now one combined VoiceOver element labelled title + episode + time remaining + percent watched | `Rivulet/Views/Media/ContinueWatchingCard.swift` | Reviewed | Pending | Device capture deferred (`DEBT-E0-007`) |
+| E2-PR5-TEST-001 | Testing | 2026-06-01 | Epic 2 owner | `HomeRowOrderingPolicyTests` (5): CW-first, omit-when-nil/empty, order preserved, empty | `xcodebuild … -only-testing:RivuletTests/HomeRowOrderingPolicyTests` | Gate Satisfying | Pending | Pure-logic coverage |
+| E2-PR5-BUILD-001 | Testing/Build | 2026-06-01 | Epic 2 owner | tvOS build exit 0; targeted tests pass (38 cases, 0 failures); `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing warnings only |
+| E2-PR5-SCOPE-001 | Boundary | 2026-06-01 | Epic 2 owner | Diff limited to `HomeRowOrderingPolicy.swift` (new), `PlexHomeView.swift` (ordering call), `ContinueWatchingCard.swift` (a11y label) + test; no card visual redesign, no Epic 1 change | working-tree diff | Reviewed | Pending | No redesign of CW card visuals |
