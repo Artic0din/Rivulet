@@ -70,11 +70,11 @@ nonisolated enum ContentStatusLabel: Equatable, Sendable {
         case .newEpisode: return "New Episode"
         case .allEpisodesAvailable: return "All Episodes Available"
         case .recentlyAdded: return "Recently Added"
-        case .premieres(let date): return "Premieres \(Self.shortDate(date))"
-        case .returns(let date): return "Returns \(Self.shortDate(date))"
-        case .newSeason(let date): return "New Season \(Self.monthYear(date))"
+        case .premieres(let date): return "Premieres \(Self.specificDate(date))"
+        case .returns(let date): return "Returns \(Self.specificDate(date))"
+        case .newSeason(let date): return "New Season \(Self.specificDate(date))"
         case .newEpisodeWeekly(let day): return "New Episode Every \(day.displayName)"
-        case .comingSoon(let date): return "Coming \(Self.shortDate(date))"
+        case .comingSoon(let date): return "Coming \(Self.specificDate(date))"
         }
     }
 
@@ -86,17 +86,15 @@ nonisolated enum ContentStatusLabel: Equatable, Sendable {
         }
     }
 
-    private static func shortDate(_ date: Date) -> String {
+    /// Specific calendar day, e.g. "06 August" — preferred when a concrete air /
+    /// release date is known. Day is zero-padded; month is the full name.
+    private static func specificDate(_ date: Date) -> String {
         let f = DateFormatter()
         f.locale = .current
-        f.setLocalizedDateFormatFromTemplate("dMMM")
-        return f.string(from: date)
-    }
-
-    private static func monthYear(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.locale = .current
-        f.setLocalizedDateFormatFromTemplate("MMMyyyy")
+        // Air/release dates are calendar days parsed in UTC; format in UTC too so
+        // the rendered day matches the source date regardless of device timezone.
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "dd MMMM"
         return f.string(from: date)
     }
 }

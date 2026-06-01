@@ -23,20 +23,21 @@ nonisolated enum HeroRotationPolicy {
 
     /// Whether auto-rotation should run right now.
     ///   - itemCount: number of eligible hero items (need > 1 to rotate).
-    ///   - isHeroFocused: a hero control (Play/More Info/etc.) is focused — pause
-    ///     so the slide does not shift under the user.
     ///   - isBusy: a hero action is resolving (e.g. play target lookup) — pause.
     ///   - isActive: the home hero is the active, visible surface (no detail /
     ///     preview / player / resume prompt presented, app is foreground).
+    ///
+    /// Note: rotation does NOT pause merely because a hero control is focused.
+    /// On tvOS the hero lands with Play focused by default, so a focus-pause
+    /// would mean it never rotates. Like a native hero, the slide content swaps
+    /// while the (focus-stable) button row stays put.
     static func shouldRotate(
         itemCount: Int,
-        isHeroFocused: Bool,
         isBusy: Bool,
         isActive: Bool
     ) -> Bool {
         guard itemCount > 1 else { return false }
         guard isActive else { return false }
-        guard !isHeroFocused else { return false }
         guard !isBusy else { return false }
         return true
     }

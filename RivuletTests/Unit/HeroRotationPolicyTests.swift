@@ -12,26 +12,27 @@ final class HeroRotationPolicyTests: XCTestCase {
 
     // MARK: - shouldRotate gate
 
-    func testRotatesWhenActiveUnfocusedMultiItemNotBusy() {
-        XCTAssertTrue(HeroRotationPolicy.shouldRotate(itemCount: 5, isHeroFocused: false, isBusy: false, isActive: true))
+    func testRotatesWhenActiveMultiItemNotBusy() {
+        XCTAssertTrue(HeroRotationPolicy.shouldRotate(itemCount: 5, isBusy: false, isActive: true))
+    }
+
+    func testRotatesEvenWhenHeroControlFocused() {
+        // The hero lands with Play focused; rotation must NOT pause for that.
+        XCTAssertTrue(HeroRotationPolicy.shouldRotate(itemCount: 5, isBusy: false, isActive: true))
     }
 
     func testDoesNotRotateWithOneOrZeroItems() {
-        XCTAssertFalse(HeroRotationPolicy.shouldRotate(itemCount: 1, isHeroFocused: false, isBusy: false, isActive: true))
-        XCTAssertFalse(HeroRotationPolicy.shouldRotate(itemCount: 0, isHeroFocused: false, isBusy: false, isActive: true))
-    }
-
-    func testPausesWhileHeroFocused() {
-        XCTAssertFalse(HeroRotationPolicy.shouldRotate(itemCount: 5, isHeroFocused: true, isBusy: false, isActive: true))
+        XCTAssertFalse(HeroRotationPolicy.shouldRotate(itemCount: 1, isBusy: false, isActive: true))
+        XCTAssertFalse(HeroRotationPolicy.shouldRotate(itemCount: 0, isBusy: false, isActive: true))
     }
 
     func testPausesWhileBusy() {
-        XCTAssertFalse(HeroRotationPolicy.shouldRotate(itemCount: 5, isHeroFocused: false, isBusy: true, isActive: true))
+        XCTAssertFalse(HeroRotationPolicy.shouldRotate(itemCount: 5, isBusy: true, isActive: true))
     }
 
     func testPausesWhenInactive() {
         // Detail/preview/player presented, or app backgrounded.
-        XCTAssertFalse(HeroRotationPolicy.shouldRotate(itemCount: 5, isHeroFocused: false, isBusy: false, isActive: false))
+        XCTAssertFalse(HeroRotationPolicy.shouldRotate(itemCount: 5, isBusy: false, isActive: false))
     }
 
     // MARK: - nextIndex wrapping

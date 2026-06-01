@@ -64,11 +64,13 @@ struct HeroOverlayContent: View {
 
     private var canAdvance: Bool { items.count > 1 }
 
-    /// Whether auto-rotation may run right now (pure policy + live state).
+    /// Whether auto-rotation may run right now (pure policy + live state). Note:
+    /// focus does NOT pause rotation — the hero lands with Play focused, so a
+    /// focus-pause would stop it rotating entirely (the button row is
+    /// focus-stable, so only the slide content swaps).
     private var rotationActive: Bool {
         HeroRotationPolicy.shouldRotate(
             itemCount: items.count,
-            isHeroFocused: focusedButton != nil,
             isBusy: isResolvingPlay,
             isActive: autoRotationEnabled && scenePhase == .active
         )
@@ -76,10 +78,10 @@ struct HeroOverlayContent: View {
 
     /// Restart token for the rotation wait. Any change cancels and restarts the
     /// `.task`, which RESETS the interval — so a manual advance (currentIndex),
-    /// focus enter/exit (pause/resume), busy state, scene phase, or item-set
-    /// change all restart the countdown rather than firing mid-wait.
+    /// busy state, scene phase, or item-set change all restart the countdown
+    /// rather than firing mid-wait.
     private var rotationToken: String {
-        "\(currentIndex)|\(focusedButton != nil)|\(isResolvingPlay)|\(items.count)|\(autoRotationEnabled)|\(scenePhase == .active)"
+        "\(currentIndex)|\(isResolvingPlay)|\(items.count)|\(autoRotationEnabled)|\(scenePhase == .active)"
     }
 
     /// Must match the hero-section height computed in `PlexHomeView.contentView`

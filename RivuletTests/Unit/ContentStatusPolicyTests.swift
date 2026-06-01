@@ -117,6 +117,13 @@ final class ContentStatusPolicyTests: XCTestCase {
         XCTAssertTrue(ContentStatusLabel.comingSoon(d).displayText.hasPrefix("Coming "))
     }
 
+    func testDatedLabelsShowSpecificDayNotMonthYear() {
+        // A concrete date renders as "dd MMMM" (e.g. "06 August"), never "MMM yyyy".
+        let date = ContentStatusPolicy.parseAirDate("2026-08-06")!
+        XCTAssertEqual(ContentStatusLabel.newSeason(date).displayText, "New Season 06 August")
+        XCTAssertEqual(ContentStatusLabel.premieres(date).displayText, "Premieres 06 August")
+    }
+
     func testIsFutureFacingFlag() {
         XCTAssertTrue(ContentStatusLabel.premieres(ref).isFutureFacing)
         XCTAssertTrue(ContentStatusLabel.newEpisodeWeekly(.monday).isFutureFacing)
