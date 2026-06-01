@@ -33,6 +33,32 @@ final class ContentPresentationPolicyTests: XCTestCase {
         XCTAssertEqual(ContentPresentationStyle.default, .poster)
     }
 
+    // MARK: - showsLandscapeComposition (poster→landscape-on-focus, ADO-02)
+
+    func testLandscapeStyleAlwaysShowsLandscape() {
+        XCTAssertTrue(ContentPresentationPolicy.showsLandscapeComposition(style: .landscape, isFocused: false))
+        XCTAssertTrue(ContentPresentationPolicy.showsLandscapeComposition(style: .landscape, isFocused: true))
+    }
+
+    func testPosterStyleNeverShowsLandscape() {
+        XCTAssertFalse(ContentPresentationPolicy.showsLandscapeComposition(style: .poster, isFocused: false))
+        XCTAssertFalse(ContentPresentationPolicy.showsLandscapeComposition(style: .poster, isFocused: true))
+    }
+
+    func testPosterExpandsShowsLandscapeOnlyWhenFocused() {
+        // Resolved style BEFORE focus → poster-shaped resting (no landscape).
+        XCTAssertFalse(ContentPresentationPolicy.showsLandscapeComposition(style: .posterExpandsToLandscape, isFocused: false))
+        // Resolved style AFTER focus → landscape composition.
+        XCTAssertTrue(ContentPresentationPolicy.showsLandscapeComposition(style: .posterExpandsToLandscape, isFocused: true))
+    }
+
+    func testAccessibilityLabelStableAcrossFocusStates() {
+        // The combined label must not depend on focus/landscape state.
+        let label = ContentCardAccessibility.label(title: "Dune", infoLine: ["M", "2021"], badges: [])
+        XCTAssertEqual(label, ContentCardAccessibility.label(title: "Dune", infoLine: ["M", "2021"], badges: []))
+        XCTAssertEqual(label, "Dune, M, 2021")
+    }
+
     // MARK: - Title treatment
 
     func testTitleLogoSourceOrder() {

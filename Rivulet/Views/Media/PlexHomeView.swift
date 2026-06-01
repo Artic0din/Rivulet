@@ -769,9 +769,10 @@ struct PlexHomeView: View {
                                     serverURL: authManager.selectedServerURL ?? "",
                                     authToken: authManager.selectedServerToken ?? "",
                                     isContinueWatching: isContinueWatching,
-                                    // ADO-02: Recently Added rows render landscape cards;
-                                    // all other rows keep the poster card.
-                                    cardStyle: isRecentlyAddedHub(hub) ? .landscape : .poster,
+                                    // ADO-02: Recently Added rows use poster→landscape-on-focus
+                                    // (poster at rest, landscape composition on focus); all
+                                    // other rows keep the plain poster card.
+                                    cardStyle: isRecentlyAddedHub(hub) ? .posterExpandsToLandscape : .poster,
                                     contextMenuSource: isContinueWatching ? .continueWatching : .other,
                                     onItemSelected: { item in selectItem(item) },
                                     onPlayItem: { item in

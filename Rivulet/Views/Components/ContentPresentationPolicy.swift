@@ -49,6 +49,18 @@ nonisolated enum ContentPresentationPolicy {
             return hasLandscapeArtwork ? preferred : .poster
         }
     }
+
+    /// Whether the landscape composition (artwork + metadata overlay) is shown
+    /// for a resolved style and focus state. `.landscape` always shows it;
+    /// `.poster` never does; `.posterExpandsToLandscape` shows it only on focus
+    /// (poster-shaped at rest → landscape on focus).
+    static func showsLandscapeComposition(style: ContentPresentationStyle, isFocused: Bool) -> Bool {
+        switch style {
+        case .landscape: return true
+        case .poster: return false
+        case .posterExpandsToLandscape: return isFocused
+        }
+    }
 }
 
 // MARK: - Title treatment (logo vs text)

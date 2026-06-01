@@ -56,7 +56,7 @@ code is wired and visible.
 | CastImagePresentation + cast a11y | LIVE | `c9ba2b2` | `CastMemberCard`/`PersonCard` (:49,79) | detail → Cast & Crew | — | label + initials fallback |
 | **ContentPresentationPolicy** | **LIVE (ADO-02)** | `1870830`, ADO-02 | Home Recently Added row (via `PlexContentCardMapper`) | Home → Recently Added | — | drives title/artwork/metadata of the landscape card |
 | **LandscapeContentCard** | **LIVE (ADO-02, one row)** | `e077384`, ADO-02 | Home Recently Added row | Home → Recently Added | `DEBT-E3-PR7-001` (broader rows) | always-`.landscape` mode wired; other rows unchanged |
-| **poster-to-landscape-on-focus** | BUILT BUT UNUSED | `e077384` | `#Preview` only | — | `DEBT-E3-PR7-001` | `.posterExpandsToLandscape` mode supported but not wired to a row |
+| **poster-to-landscape-on-focus** | **LIVE (ADO-02 correction)** | `e077384`, ADO-02 | Home Recently Added row | Home → Recently Added (focus a card) | `DEBT-E3-PR7-001` (broader rows) | `.posterExpandsToLandscape`: poster at rest → landscape on focus; constant footprint, no thrash |
 | ~~EpisodeContentCard~~ | **RETIRED (ADO-01B)** | `e53cf9f` → deleted `d6a274f`+ADO-01B | n/a | — | resolved | dead view + model machinery removed; production `EpisodeCard` is canonical |
 | **EpisodeCardPresentation** | **LIVE (ADO-01)** | `e53cf9f`, `d6a274f` | production `EpisodeCard` in `MediaDetailView` | show → episode detail | — | episode label + combined VoiceOver summary sourced from policy |
 | **ScheduleLabelPolicy** | BUILT BUT UNUSED | `e53cf9f` | none | — | new `DEBT-E3-PR10-001` | no hero/detail label consumer |

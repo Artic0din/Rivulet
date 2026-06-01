@@ -94,22 +94,21 @@ struct LandscapeContentCard: View {
     private var height: CGFloat { ScaledDimensions.continueWatchingHeight * scale }
     private var cornerRadius: CGFloat { ContentDesignTokens.Shape.cornerRadius }
 
-    /// Whether the landscape composition (artwork + overlay) is shown. For the
-    /// poster-expands style this is only when focused.
+    /// Whether the landscape composition is shown — delegated to the tested
+    /// `ContentPresentationPolicy.showsLandscapeComposition`.
     private var showsLandscape: Bool {
-        switch style {
-        case .landscape: return true
-        case .poster: return false
-        case .posterExpandsToLandscape: return isFocused
-        }
+        ContentPresentationPolicy.showsLandscapeComposition(style: style, isFocused: isFocused)
     }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            artwork
-            if showsLandscape {
-                overlay
-            }
+        // Constant footprint (width × height) in EVERY state, so the row keeps a
+        // fixed height and the cells never reflow, clip, or overlap as focus
+        // moves. The poster-at-rest and landscape compositions are stacked and
+        // cross-faded by opacity — both images load at render time (never on
+        // focus), so focus movement triggers no network fetch.
+        ZStack {
+            landscapeLayer.opacity(showsLandscape ? 1 : 0)
+            posterRestingLayer.opacity(showsLandscape ? 0 : 1)
         }
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -118,26 +117,47 @@ struct LandscapeContentCard: View {
             PreviewMotionPolicy.animation(ContentDesignTokens.Motion.rowFocus, reduceMotion: reduceMotion),
             value: isFocused
         )
+        // Accessibility identity is stable across resting/focused states — the
+        // same combined label regardless of which visual layer is shown.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(ContentCardAccessibility.label(title: model.title, infoLine: model.infoLine, badges: model.badges))
         .accessibilityAddTraits(.isButton)
     }
 
-    // MARK: - Artwork
+    // MARK: - Landscape layer (focused / always-landscape)
 
-    @ViewBuilder
-    private var artwork: some View {
-        // Poster style (and poster-at-rest) uses the poster image; landscape
-        // composition uses the resolved landscape/backdrop artwork.
-        let url = showsLandscape ? model.artwork.url : (model.posterURL ?? model.artwork.url)
-        CachedAsyncImage(url: url) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable().aspectRatio(contentMode: .fill)
-            case .empty:
-                Rectangle().fill(Color(white: 0.15)).overlay { ProgressView().tint(.white.opacity(0.3)) }
-            case .failure:
-                placeholder
+    private var landscapeLayer: some View {
+        ZStack(alignment: .bottomLeading) {
+            CachedAsyncImage(url: model.artwork.url ?? model.posterURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().aspectRatio(contentMode: .fill)
+                case .empty:
+                    Rectangle().fill(Color(white: 0.15)).overlay { ProgressView().tint(.white.opacity(0.3)) }
+                case .failure:
+                    placeholder
+                }
+            }
+            .frame(width: width, height: height)
+            .clipped()
+            overlay
+        }
+    }
+
+    // MARK: - Poster resting layer (poster-shaped, fit on dark gutters)
+
+    private var posterRestingLayer: some View {
+        ZStack {
+            Color(white: 0.10)
+            CachedAsyncImage(url: model.posterURL ?? model.artwork.url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().aspectRatio(contentMode: .fit) // poster shape, no crop
+                case .empty:
+                    ProgressView().tint(.white.opacity(0.3))
+                case .failure:
+                    placeholder
+                }
             }
         }
         .frame(width: width, height: height)

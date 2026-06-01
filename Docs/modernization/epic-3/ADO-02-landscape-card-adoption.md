@@ -39,13 +39,37 @@ Status: Complete (bounded — one row).
    .poster` — **only Recently Added rows** change; every other row keeps posters.
 
 ## What is / isn't live
-- **LANDSCAPE card: LIVE** in Recently Added (always-landscape mode).
-- **ContentPresentationPolicy: LIVE** (via the mapper).
-- **poster→landscape-on-focus: NOT live** — I adopted the always-`.landscape`
-  mode (fixed size, lowest layout risk). The `.posterExpandsToLandscape` mode
-  exists and `resolveStyle` supports it, but is not yet wired to a row. Recorded
-  separately under `DEBT-E3-PR7-001`.
+- **LANDSCAPE card: LIVE** in Recently Added.
+- **ContentPresentationPolicy: LIVE** (via the mapper + `showsLandscapeComposition`).
+- **poster→landscape-on-focus: LIVE** (correction pass). Recently Added now uses
+  `.posterExpandsToLandscape`: poster-shaped at rest, landscape composition on
+  focus. See §Correction below.
 - Technical badges: not mapped (no quality data wired) → no badge spam; future ADO.
+
+## Correction pass — poster→landscape-on-focus made live
+
+The initial ADO-02 used `.landscape` (always) and deferred poster→landscape-on-
+focus. That left the slice partial. The correction makes it live in the same
+Recently Added row, safely:
+
+- The card keeps a **constant footprint** (`continueWatchingWidth × Height`,
+  392×280) in *every* state. The row height is therefore constant and cells
+  never reflow, clip, or overlap as focus moves.
+- **At rest**: the poster image is shown `.fit` (poster-shaped, no crop) centered
+  on a dark gutter fill — a poster-shaped resting state.
+- **On focus**: cross-fade to the landscape artwork (`.fill`) + lower-left
+  logo/title/metadata overlay.
+- The resting/focused decision is the tested
+  `ContentPresentationPolicy.showsLandscapeComposition(style:isFocused:)`.
+- Both images load at **render** (stacked + opacity cross-fade), so focus
+  movement triggers **no** network fetch. Cross-fade is gated by Reduce Motion
+  (instant swap when reduced — no info lost).
+- **Accessibility identity is stable**: the same combined VoiceOver label is used
+  in both states (does not depend on focus/landscape), so VoiceOver never sees
+  duplicate or shifting elements.
+
+Row selection, carousel preview, focus restoration, left/right navigation, and
+return focus are all unchanged (the host Button still owns them).
 
 ## Behaviour preserved
 Selection, preview (carousel) via the unchanged Button + `previewSourceAnchor`,
@@ -73,17 +97,22 @@ no-duplicate-token, landscape/poster fallback, info-line, hasLandscapeArtwork);
 ## Simulator validation instructions
 1. Run Rivulet on the Apple TV sim, sign into Plex.
 2. Home → scroll to a **"Recently Added <Library>"** row.
-3. Those cards now render as **landscape** cards (lower-left logo/title overlay,
-   Rating · Year · Runtime) instead of portrait posters. Other rows
-   (Continue Watching, etc.) are unchanged.
-4. Focus a card: subtle scale; click → same detail/preview as before; left/right
-   moves between cards; returning preserves focus.
-5. VoiceOver: a card announces "Title, Rating, Year, Runtime".
+3. Those cards now render **poster-shaped at rest**, and **expand/cross-fade to a
+   landscape card** (lower-left logo/title, Rating · Year · Runtime) **when
+   focused**. Other rows (Continue Watching, etc.) are unchanged.
+4. Move focus across the row: the resting cards are posters; the focused card
+   shows the landscape composition. Row height stays constant (no thrash); no
+   clipping/overlap; horizontal scroll and return-focus preserved.
+5. Click a focused card → same detail/preview as before.
+6. VoiceOver: a card announces "Title, Rating, Year, Runtime" in both states
+   (stable identity).
+7. Reduce Motion on: the swap is instant (no cross-fade), still poster→landscape.
 
 ## Debt
-- `DEBT-E3-PR7-001` **reduced**: landscape card + `ContentPresentationPolicy` now
-  live in one row. **Still open**: broader row migration (only Recently Added
-  converted) and the `.posterExpandsToLandscape` mode (built, not wired).
+- `DEBT-E3-PR7-001` **substantially reduced**: landscape card,
+  `ContentPresentationPolicy`, **and** poster→landscape-on-focus are all now LIVE
+  in the Recently Added row. **Still open**: broader row migration (only Recently
+  Added uses these cards) and technical-badge mapping.
 
 ## Recommendation for ADO-03
 Schedule labels (`ScheduleLabelPolicy`) onto hero/detail, OR adopt
