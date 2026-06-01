@@ -1563,21 +1563,15 @@ final class UniversalPlayerViewModel: ObservableObject {
         do {
             let (data, _) = try await URLSession.shared.data(for: request)
             if let manifest = String(data: data, encoding: .utf8) {
-                print("[HLS Manifest] ===== Master Playlist =====")
-                for line in manifest.components(separatedBy: "\n") {
-                    print("[HLS Manifest] \(line)")
-                }
-                print("[HLS Manifest] ===== End =====")
-
-                // Quick summary
-                let hasIFrame = manifest.contains("EXT-X-I-FRAME")
+                // SECURITY: the manifest body contains token-bearing URLs — log a
+                // token-free structural summary, never the body. Track counts
+                // (audio/subtitle/I-frame) remain useful without leaking URLs.
                 let audioTags = manifest.components(separatedBy: "\n").filter { $0.contains("TYPE=AUDIO") }
                 let subtitleTags = manifest.components(separatedBy: "\n").filter { $0.contains("TYPE=SUBTITLES") }
-                print("[HLS Manifest] I-Frame playlist: \(hasIFrame ? "YES" : "NO")")
-                print("[HLS Manifest] Audio tracks: \(audioTags.count)")
-                print("[HLS Manifest] Subtitle tracks: \(subtitleTags.count)")
+                print("[HLS Manifest] Master: \(HLSManifestEnricher.manifestDiagnosticSummary(manifest)) audio=\(audioTags.count) subtitles=\(subtitleTags.count)")
 
-                // Also fetch and log keyframe playlist if present
+                // Also fetch the keyframe playlist if present — log a count-only
+                // summary (its lines are token-bearing segment URLs).
                 if let iframeLine = manifest.components(separatedBy: "\n")
                     .first(where: { $0.contains("EXT-X-I-FRAME-STREAM-INF") }),
                    let uriRange = iframeLine.range(of: "URI=\""),
@@ -1594,16 +1588,14 @@ final class UniversalPlayerViewModel: ObservableObject {
                         for (key, value) in headers { kfRequest.setValue(value, forHTTPHeaderField: key) }
                         if let (kfData, _) = try? await URLSession.shared.data(for: kfRequest),
                            let kfManifest = String(data: kfData, encoding: .utf8) {
-                            let kfLines = kfManifest.components(separatedBy: "\n")
-                            print("[HLS Manifest] ===== Keyframe Playlist (\(kfLines.count) lines) =====")
-                            for line in kfLines.prefix(20) { print("[HLS Manifest/KF] \(line)") }
-                            if kfLines.count > 20 { print("[HLS Manifest/KF] ... (\(kfLines.count - 20) more lines)") }
+                            print("[HLS Manifest] Keyframe: \(HLSManifestEnricher.manifestDiagnosticSummary(kfManifest))")
                         }
                     }
                 }
             }
         } catch {
-            print("[HLS Manifest] Failed to fetch: \(error.localizedDescription)")
+            // Redact: URLSession errors can embed the token-bearing failing URL.
+            print("[HLS Manifest] Failed to fetch: \(SensitiveDataRedactor.redact(String(describing: error)) ?? "error")")
         }
     }
 
@@ -1957,7 +1949,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         self.remuxServer = server
 
         let localURL = try server.start()
-        print("[Remux] Server started: \(localURL), segments=\(sessionInfo.segments.count), target=seg\(clampedIdx)")
+        // localURL is a loopback proxy URL (no Plex token), but redact for
+        // policy consistency — diagnostics never emit unredacted stream URLs.
+        print("[Remux] Server started: \(SensitiveDataRedactor.redact(localURL) ?? SensitiveDataRedactor.redactedURLValue), segments=\(sessionInfo.segments.count), target=seg\(clampedIdx)")
 
         try loadAVPlayer(url: localURL, headers: nil)
 

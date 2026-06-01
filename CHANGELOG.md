@@ -10,6 +10,7 @@
 
 ### Security
 
+- HLS manifest diagnostics no longer leak the Plex auth token. The HLS master/keyframe playlist debug logging (in `HLSManifestEnricher` and the player view model) previously printed the full manifest body, whose rewritten URLs carry `X-Plex-Token`; it now logs only a token-free structural summary (line/variant/track counts). Error and local-server-URL diagnostics on those paths are redacted as well. DEBUG-only logging, but simulator runs are DEBUG, so the token was reaching the console.
 - Epic 2 PR7: Home error messages are now sanitized before display — a failed request's technical description (which can contain a token-bearing URL) can no longer appear in on-screen copy. Users see calm, plain-language errors; clean messages like "the connection appears to be offline" are preserved.
 - Epic 2 PR2: Top Shelf no longer shares Plex token-bearing image URLs with the system extension. Artwork is handed off as local files in the App Group; the extension reads local files only. Top Shelf items and deep links are unchanged.
 
