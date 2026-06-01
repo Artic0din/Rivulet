@@ -961,43 +961,26 @@ struct MediaDetailView: View {
         .foregroundStyle(.white.opacity(0.85))
     }
 
+    // E3-PR4: ordering owned by the tested DetailMetadataCascade (type label +
+    // up to 2 genres). Behavior-identical to the prior inline logic.
     private var heroMetadataParts: [String] {
-        var parts: [String] = []
-
-        // Type label from kind
-        switch currentItem.kind {
-        case .show, .episode, .season:
-            parts.append("TV Show")
-        case .movie:
-            parts.append("Movie")
-        default:
-            break
-        }
-
-        // Genres (up to 2 — keeps the row concise alongside the type label and rating badge)
-        let genres = detail?.genres ?? []
-        for genre in genres.prefix(2) {
-            parts.append(genre)
-        }
-
-        return parts
+        DetailMetadataCascade.primaryParts(kind: currentItem.kind, genres: detail?.genres ?? [])
     }
 
     /// Year, duration, quality badges row (Apple TV+ style: "2023 · 49 min [4K] [DV] [5.1]")
     private var heroQualityRow: some View {
         HStack(spacing: 8) {
-            // Year · Duration with dot separator
-            let year = currentItem.year
-            let duration = currentItemDurationFormatted
-
-            if let year {
-                Text(String(year))
-            }
-            if year != nil && duration != nil {
-                Text("·")
-            }
-            if let duration {
-                Text(duration)
+            // Year · Duration with dot separator. Ordering/nil-filtering owned
+            // by the tested DetailMetadataCascade (E3-PR4); behavior-identical.
+            let chronology = DetailMetadataCascade.chronologyParts(
+                year: currentItem.year,
+                duration: currentItemDurationFormatted
+            )
+            ForEach(Array(chronology.enumerated()), id: \.offset) { index, part in
+                if index > 0 {
+                    Text("·")
+                }
+                Text(part)
             }
 
             if let rating = detail?.rating {

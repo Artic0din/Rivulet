@@ -884,3 +884,17 @@ gating for structural preview transitions; focus restoration preserved.
 | E3-PR3-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `PreviewStateMachineTests` (9) + `PreviewMotionPolicyTests` (3) + `FocusRestorationPolicyTests` (10) pass | `xcodebuild … -only-testing:…` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure-logic coverage |
 | E3-PR3-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors, no new isolation warnings; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
 | E3-PR3-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `PreviewMotionPolicy.swift` (new), `PreviewOverlayHost.swift` (env + 4 motion sites) + test + audit doc; no focus-restore/playback/cascade change | working-tree diff + scope scans | Reviewed | Pending | Structural motion only |
+
+## Epic 3 PR 4 Evidence Entries (Detail Metadata Cascade)
+
+E3-PR4 extracts the detail hero metadata ordering into a pure, tested policy;
+behavior-identical, no structural detail rewrite.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E3-PR4-AUDIT-001 | Detail | 2026-06-01 | Epic 3 owner | Detail audit: hero metadata built with inline conditionals (type+genres, year/·/duration), untested; full ContentStateView adoption deferred (high-risk on 3.7k-line view; granular spinners already cover sub-sections) | `Docs/modernization/epic-3/E3-PR4-detail-cascade.md` | Reviewed | Pending | Scopes the cascade extraction |
+| E3-PR4-CASCADE-001 | Detail | 2026-06-01 | Epic 3 owner | Pure `DetailMetadataCascade`: `primaryParts` (type label + capped genres) + `chronologyParts` (ordered nil-filtered year/duration); `MediaDetailView` delegates; behavior-identical | `Rivulet/Views/Media/DetailMetadataCascade.swift`, `Rivulet/Views/Media/MediaDetailView.swift` | Gate Satisfying | Pending | Deterministic ordering |
+| E3-PR4-A11Y-001 | Accessibility | 2026-06-01 | Epic 3 owner | A11Y-008/009: VoiceOver reads metadata in deterministic order (type → genres → chronology); detail actions/episode structure unchanged | `Docs/modernization/epic-3/E3-PR4-detail-cascade.md` | Reviewed | Pending | Device capture pending (`DEBT-E0-007`) |
+| E3-PR4-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `DetailMetadataCascadeTests` (11): type mapping (movie/show/season/episode/collection/person/unknown), genre cap, chronology order + nil-filtering | `xcodebuild … -only-testing:RivuletTests/DetailMetadataCascadeTests` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure-logic coverage |
+| E3-PR4-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+| E3-PR4-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `DetailMetadataCascade.swift` (new), `MediaDetailView.swift` (2 delegation sites) + test + audit doc; no playback/provider/structural-detail change | working-tree diff + scope scans | Reviewed | Pending | Text-segment ordering only |

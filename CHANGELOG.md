@@ -15,6 +15,7 @@
 
 ### Internal (no user-facing change)
 
+- Epic 3 PR4: detail-page hero metadata now renders in a deterministic, tested order (type → genres → year · duration) via `DetailMetadataCascade`. Behavior-identical; ordering is no longer scattered inline. No visual change.
 - Epic 3 PR2: introduced a canonical content design-token layer (`ContentDesignTokens`) over `ScaledDimensions` and refactored `GlassRowStyle` to consume it. Behavior-identical (token values equal the prior literals, pinned by tests); establishes one source of truth for content focus opacities, scales, motion, depth, and the metadata type ramp. No visual change.
 - Epic 3 PR1: Apple TV Content Experience decomposition + content-surface baseline audit (`Docs/modernization/epic-3/epic-3-decomposition.md`). Planning only; no behavior change.
 - Epic 2 closed (with accepted debt): hero-first Home, prominent Continue Watching, deterministic navigation and focus, normalised/sanitized loading-empty-error states, and secure Top Shelf. Full test suite green (461 passed). On-device accessibility and numeric performance capture remain as pre-ship tasks. See `Docs/modernization/epic-2/epic-2-closure-report.md`.
