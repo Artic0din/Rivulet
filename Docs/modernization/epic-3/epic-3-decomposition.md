@@ -354,6 +354,58 @@ Tests (pure logic preferred): presentation-style selection, artwork fallback,
 logo fallback, metadata formatting, technical-badge selection, runtime
 formatting, focus-restoration interactions. Avoid fragile screenshot tests.
 
+## 21. Product Direction Update #2 (2026-06-01) — Episode cards, cast images, schedule labels
+
+This second amendment expands and supersedes §20 by adding episode cards,
+cast/crew images, and TV schedule/air-date labels. It reopens Epic 3 (the E3-PR9
+closure was premature relative to this direction); E3-PR1..PR9 work remains
+valid. It does not reopen Epic 2, change Epic 1, authorise playback, or authorise
+rename. Apple TV remains the faithfulness benchmark (no Apple branding/asset/
+name/trade-dress/private-API/integration claims).
+
+### 21.1 Additional scope (Epic 3 owns)
+
+Episode cards; cast/crew presentation + real image loading; air-date /
+availability / episode labels; plus everything in §20.2. Implement, not defer,
+unless implementation proves external data is unavailable.
+
+### 21.2 Data availability (audited — all from existing Plex model)
+
+- Episode cards: `PlexMetadata.index`/`parentIndex`/`title`/`summary`/`duration`
+  /`thumb`/`viewOffset`/`viewedLeafCount` already present.
+- Cast/crew images: `PlexRole.tag`/`role`/`thumb` already present; `PersonCard`
+  already loads images via `CachedAsyncImage` with placeholder fallback.
+- Schedule labels: `originallyAvailableAt`, `addedAt`, `index`, `leafCount`
+  already present. Plex air dates are the first source; TVDb/TMDb remain optional
+  enhancements and are NOT added as a new provider boundary in Epic 3.
+
+### 21.3 New slices
+
+- **E3-PR10** — Schedule-label policy (`ScheduleLabelPolicy`, deterministic,
+  testable, Plex-air-date-first, no-label fallback) + episode-card presentation
+  (`EpisodeCardPresentation` model/label/accessibility, pure+tested) +
+  `EpisodeContentCard` (additive view: landscape still, "EPISODE n" label, title,
+  synopsis, runtime row, progress/watched, gradient overlay, accessible summary).
+- **E3-PR11** — Cast/crew image policy (`CastImagePresentation`: image-URL
+  resolution + initials fallback + accessible "name, role" label) wired into
+  `PersonCard` (image loading already present; add the policy + accessibility).
+- **E3-PR12** — Revised Epic 3 closure (supersedes the premature E3-PR9 closure).
+
+### 21.4 Updated acceptance additions (Epic 3 may not close until)
+
+Episode cards are Apple-TV-quality or deferred-with-debt; cast/crew images
+supported or deferred-with-debt; air-date/availability label policy exists or
+deferred-with-debt — in addition to §20.7. No playback architecture change.
+
+### 21.5 Constraints reaffirmed
+
+Display-only metadata: technical badges/labels never change playback routing or
+codec handling. No timeline/watch-state ownership change. No new external
+metadata provider without documented security/privacy/performance review. No
+network fetch on focus. Pure-logic tests preferred; no fragile screenshot tests.
+"How to Watch" for a Plex-backed app means local/library availability — no fake
+streaming-service availability is fabricated.
+
 ## 15. Closure checklist
 
 - [ ] All §8 acceptance criteria met or explicitly debt-accepted.

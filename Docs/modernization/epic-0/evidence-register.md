@@ -966,3 +966,17 @@ the closure report. No production code change.
 | E3-PR9-CLOSURE-001 | Epic Closure | 2026-06-01 | Epic 3 owner | Epic 3 closure report: expanded-acceptance status, slices, files, parity, a11y, perf, security, debt, UAT/device-validation required, recommendation (close with accepted debt) | `Docs/modernization/epic-3/epic-3-closure-report.md` | Gate Satisfying | Pending | Mirrors Epic 1/2 closure structure |
 | E3-PR9-VALIDATION-001 | Testing/Build | 2026-06-01 | Epic 3 owner | Full suite: 511 passed, 0 failed; tvOS build exit 0; 7 Epic 3 pure-policy/label suites enumerated with corrected counts | `xcodebuild … test` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | +50 tests over Epic 2 close (461) |
 | E3-PR9-PARITY-001 | Parity | 2026-06-01 | Epic 3 owner | Proposed: Visual Language 3→4, Detail 3→4, Preview 4 (strengthened), Accessibility 2→3; capped pending device/numeric (Rule 2); awaiting Project Owner (Rule 4) | `Docs/modernization/epic-0/parity-scorecard.md` | Reviewed | Pending | Not self-accepted |
+
+## Epic 3 PR 10 Evidence Entries (Episode Cards + Schedule Labels)
+
+E3-PR10 (Product Direction #2 — Epic 3 reopened) adds episode-card and
+schedule-label pure policies + an additive episode card, all from existing Plex
+data.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E3-PR10-SCHEDULE-001 | Content Presentation | 2026-06-01 | Epic 3 owner | Pure `ScheduleLabelPolicy` (New/Recently Added/Season Finale/Continue Watching), deterministic most-specific-first, nil when insufficient; Plex air-date parse + days-since helpers (reference-date based, no `Date.now()`) | `Rivulet/Views/Media/EpisodePresentationPolicy.swift` | Gate Satisfying | Pending | No misleading labels; cadence omitted (data absent) |
+| E3-PR10-EPISODE-001 | Content Presentation | 2026-06-01 | Epic 3 owner | Pure `EpisodeCardPresentation` (model, "EPISODE n", runtime, progress, combined VoiceOver) + additive `EpisodeContentCard` (still, label, title, synopsis, runtime, watched/progress, gradient, reduce-motion, no focus fetch) | `Rivulet/Views/Media/EpisodePresentationPolicy.swift`, `Rivulet/Views/Media/EpisodeContentCard.swift` | Gate Satisfying | Pending | From existing Plex model only |
+| E3-PR10-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `ScheduleLabelPolicyTests` (9) + `EpisodeCardPresentationTests` (6): label priority/thresholds/negative-days, air-date parse, model runtime/progress/fallback, accessibility labels | `xcodebuild … -only-testing:…` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure-logic coverage |
+| E3-PR10-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+| E3-PR10-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `EpisodePresentationPolicy.swift` (new), `EpisodeContentCard.swift` (new) + test + audit doc; no playback/watch-state/timeline/provider/Epic 1 change | working-tree diff + scope scans | Reviewed | Pending | Display-only; additive card |
