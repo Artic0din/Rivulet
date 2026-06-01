@@ -269,6 +269,91 @@ rating keys/titles, never tokens.
 
 ---
 
+## 20. Product Direction Update (2026-06-01) — Content Presentation System
+
+This amendment expands Epic 3 scope per the approved product clarification. It
+does not reopen Epic 2, change Epic 1, authorise playback work, or authorise app
+rename. Earlier slices E3-PR1..PR5 remain valid and consistent with it.
+
+### 20.1 Clarified UX intent
+
+Target experience: as faithful as reasonably possible to the Apple TV app's
+layout, interaction model, hierarchy, focus behaviour, content presentation, and
+perceived quality, while remaining a distinct Plex-backed app using the user's
+own media. Apple TV app is the benchmark, not a clone:
+- No Apple-owned branding, assets, names, trade dress, or private APIs.
+- No claims of Apple TV-app / Up Next / Universal Search integrations unless
+  implemented through public APIs.
+- Aim for a very close first-party tvOS feel.
+
+### 20.2 Expanded scope — Content Presentation System (Epic 3 owns)
+
+Content card presentation; landscape artwork presentation; poster presentation;
+logo presentation; metadata hierarchy; technical badges; content ratings;
+runtime display; detail/preview/hero metadata hierarchy (where Epic 3 touches
+content presentation); poster→landscape transformations; visual identity
+consistency across content surfaces. This is Epic 3 work, not a later polish epic.
+
+### 20.3 Presentation-style model
+
+A centralized, testable, reusable `ContentPresentationStyle` (enum, not raw
+booleans): `landscape`, `poster`, `posterExpandsToLandscape` (names may evolve).
+Selection lives in a scoped policy, not scattered across views.
+
+### 20.4 Fallback orders (canonical)
+
+- Title treatment: logo artwork → title artwork → plain text title.
+- Card artwork: landscape artwork → fanart/backdrop crop → poster-derived →
+  generic placeholder.
+- Logo source: Plex logo → TMDb logo → TVDb logo → text title.
+All fallbacks must: use no unsafe/token-bearing image URLs; never block render
+when a logo/artwork is unavailable; preserve focus and accessibility.
+
+### 20.5 Canonical metadata hierarchy
+
+```
+Title Logo
+Rating • Year • Runtime
+4K • Dolby Vision • Atmos        (technical badges: resolution → video → audio)
+Short Description
+```
+Consistent, documented, reusable. Technical badges avoid spam — prioritise
+highest-value info, preferred order resolution → video format → audio format.
+
+### 20.6 Revised remaining slice plan
+
+- **E3-PR6 — Content presentation policy foundation**: `ContentPresentationStyle`
+  + selection policy; pure tested policies for technical-badge selection/order,
+  runtime formatting, content-rating presentation, logo fallback, artwork
+  fallback, and metadata-hierarchy ordering; reusable metadata/badge components
+  where low-risk. Extends the design-language doc.
+- **E3-PR7 — Card presentation modes**: landscape artwork card mode and the
+  poster→landscape-on-focus mode, consuming the E3-PR6 policies, with
+  deterministic focus, reduced-motion support, no focus-time network fetch, and
+  graceful artwork/logo fallback. Anything not safely implementable locally is
+  deferred with explicit debt (acceptance §20.7 permits this).
+- **E3-PR8 — Content accessibility & focus closure** (was E3-PR6).
+- **E3-PR9 — Epic 3 closure evidence** (was E3-PR7).
+
+### 20.7 Updated acceptance criteria (Epic 3 may not close until)
+
+Content presentation system documented; presentation policy exists; ≥1
+production-ready presentation style exists; landscape artwork supported or
+deferred-with-debt; logo presentation supported or deferred-with-debt; metadata
+hierarchy implemented; technical badges implemented or deferred-with-debt;
+content ratings implemented; runtime presentation implemented; poster→landscape
+mode implemented or deferred-with-debt; accessibility + performance + focus-
+restoration evidence exist; no Apple branding/trade-dress/private-API violation.
+
+### 20.8 Evidence + testing additions
+
+Evidence: content presentation policy, logo fallback, artwork fallback, metadata
+hierarchy, technical-badge hierarchy, poster→landscape behaviour, landscape card
+behaviour, accessibility, reduced-motion, performance, focus restoration.
+Tests (pure logic preferred): presentation-style selection, artwork fallback,
+logo fallback, metadata formatting, technical-badge selection, runtime
+formatting, focus-restoration interactions. Avoid fragile screenshot tests.
+
 ## 15. Closure checklist
 
 - [ ] All §8 acceptance criteria met or explicitly debt-accepted.
