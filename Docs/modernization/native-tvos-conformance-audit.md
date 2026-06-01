@@ -1,164 +1,207 @@
 # Native tvOS Conformance Audit (Full Application)
 
-Date: 2026-06-02
+Date: 2026-06-02 (v2 — full file-level sweep)
 Status: audit only — no code, no project-setting, no playback change.
-Rule applied: **native by default; custom only where native cannot achieve
-equal-or-better capability** (burden of proof is on keeping custom, not on native).
+Method: 8 parallel read-only domain sweeps across all 271 Swift files (~80k LOC) +
+spot-verification of the highest-severity findings. Supersedes the v1 surface pass.
+Rule: **native by default; keep custom only where native cannot achieve
+equal-or-better capability**; never remove a feature to become native.
 
 Classifications: **A** native/conforming · **B** should migrate to native · **C**
-custom justified · **D** custom temporary · **E** non-conforming/defect.
+custom justified · **D** custom temporary/dead · **E** non-conforming/defect.
 
-## Apple documentation consulted (via docs MCP)
+Confidence: findings marked **[verified]** were read directly this pass; others
+are scanner-reported with file:line and should be code-confirmed before any fix.
 
-- Migrating from the ObservableObject protocol to the Observable macro (Observation; tvOS 17+) — verified.
-- Customizing the tvOS Playback Experience; Presenting Content Proposals in tvOS; Presenting Navigation Markers; AVPlayerViewControllerDelegate — verified in the prior AVKit audit (`apple-avkit-playback-reference-audit.md`).
-- AVKit metadata identifiers / AVPlayerViewController — from established public API (already used in code).
-- SwiftUI focus, Top Shelf (`TVTopShelfContentProvider`), App privacy, Swift concurrency — established public guidance; SwiftUI/tvOS focus pages are JS-SPA (not machine-rendered this pass; applied from known API).
+## Apple documentation consulted (docs MCP)
+
+Observation macro migration (verified); AVKit content-proposals / customizing tvOS
+playback / navigation-markers / `AVPlayerViewControllerDelegate` (verified, prior
+audit); `AVMetadataIdentifier`, `TVTopShelfContentProvider`, App Privacy
+(required-reason APIs), ATS / `NSAllowsLocalNetworking`, SwiftData
+`VersionedSchema`/`SchemaMigrationPlan`, Swift Observation/concurrency — established
+public API. SwiftUI/tvOS focus pages are JS-SPA (not machine-rendered; applied from
+known API).
 
 ---
 
 ## Executive assessment
 
-Rivulet is **substantially native already** for structure: SwiftUI `App` +
-`WindowGroup`, `NavigationSplitView` + `TabView(.sidebarAdaptable)` +
-`NavigationStack`, **SwiftData** persistence, native `AVPlayerViewController`
-(with native `externalMetadata` + `navigationMarkerGroups`), native Top Shelf,
-and a present `PrivacyInfo.xcprivacy`. The custom code that exists is mostly in
-two legitimately-custom domains — the RPlayer FFmpeg pipeline (capability native
-AVKit lacks) and the image disk cache (native `AsyncImage` lacks persistence).
+Structurally Rivulet is **largely native**: SwiftUI `App`/`WindowGroup`,
+`TabView(.sidebarAdaptable)` + `NavigationStack` + `navigationDestination`,
+SwiftData, native `AVPlayerViewController` (with native `externalMetadata` +
+`navigationMarkerGroups`), native `TVTopShelfContentProvider`, native `AppIntents`,
+`OSSignposter`, `Vision`, `Keychain`, and a deep, correct image cache. The custom
+code in the FFmpeg/RPlayer pipeline and image cache is genuinely justified — native
+cannot match it.
 
-The real native-conformance gaps are **not** UI: they are (1) **state layer** —
-20 `ObservableObject` types + 23 `@StateObject` vs only 4 `@Observable` (Observation
-is available at tvOS 26 and is the platform-preferred pattern); (2) **concurrency**
-— `SWIFT_VERSION = 5.0` (not Swift 6 language mode) with 53 `DispatchQueue`, 31
-`Task.detached`, and ~30 lock/`@unchecked` sites; (3) **ATS** — `NSAllowsArbitraryLoads
-= true` (App Store + security risk). One playback deviation: the custom post-play
-overlay drawn over the native player (→ native `AVContentProposal`, E4-PR9).
+But a real file-level sweep (which the v1 pass did not do) surfaces material
+**defects and conformance gaps** that the structural view hid:
 
-None of these block Epic 4's pure-policy slices; the ATS + Swift-6 items are
-pre-ship (Epic 5) and the state migration is independent.
+- **Security/TLS:** `PlexThumbnailService` accepts **any** TLS certificate from any
+  host [verified]; the scoped Plex trust bypass also covers `.plex.direct` (valid CA
+  certs) and any port-32400 host, broader than needed. ATS uses blanket
+  `NSAllowsArbitraryLoads`.
+- **A reliability defect [verified]:** transcode decision/stop requests use
+  `URLSession.shared`, bypassing the self-signed-cert `URLSession` delegate — they
+  silently fail on self-signed/`.plex.direct`/IP servers.
+- **SwiftData has no migration plan [verified]** + `fatalError` on container-init
+  failure — a model change ships a store-breaking update; and `WatchProgress` +
+  the entire IPTV `@Model` graph are registered-but-dead (persistence actually goes
+  through `UserDefaults`).
+- **Swift 6 not enforced:** `SWIFT_VERSION = 5.0`, no `SWIFT_STRICT_CONCURRENCY`, so
+  the `@unchecked Sendable` + cross-actor singletons (notably `PlexNetworkManager`)
+  are unchecked data-race risk.
+- **State layer:** ~19 `ObservableObject` + ~50 `@StateObject`/`@ObservedObject`
+  sites vs 4 `@Observable` — the platform-preferred pattern at tvOS 26.
+- **Accessibility:** Settings and player controls have **zero** VoiceOver
+  annotations; grid poster cards (`MediaPosterCard`/`DiscoverTile`) and EPG cells
+  lack labels; Increase-Contrast/Reduce-Motion handled only in a few views.
+- **Native deviations:** custom post-play overlay over the native player (→
+  `AVContentProposal`, E4-PR9); two fragile focus workarounds in `TVSidebarView`
+  (a 1.5s polling watchdog + a runtime **method swizzle** of `shouldUpdateFocus` on
+  an internal `UICollectionView` class).
+- **Dead code / DRY:** several unused files; preview/player-launch boilerplate
+  triplicated across Home/Library/Discover.
+
+Correction to a scanner finding: the "duplicate `RivuletPlayer`/FFmpeg class"
+flags are **not** defects — they are a clean `#if !RIVULET_FFMPEG … #else … #endif`
+compile split [verified]. Classified **A**.
+
+None of these block Epic 4's remaining **pure-policy** slices (E4-PR5). Several are
+**App-Store / pre-ship (Epic 5) blockers** and a few are functional defects worth
+scheduling regardless of Epic.
 
 ---
 
-## Mandatory matrix
+## Mandatory matrix (representative — full findings below)
 
-| Component | Current Implementation | Native Alternative | Native Equal/Better? | Classification | Recommendation |
+| Component | Current | Native alternative | Native equal/better? | Class | Recommendation |
 | --- | --- | --- | --- | --- | --- |
-| App lifecycle / scene | SwiftUI `App` + `WindowGroup` | same | n/a | **A** | Keep |
-| Navigation (sidebar/tabs) | `NavigationSplitView` + `TabView(.sidebarAdaptable)` + `NavigationStack` | same | n/a | **A** | Keep; verify no leftover custom nav |
-| Persistence | SwiftData `@Model` (Channel/PlexServer/WatchProgress/…) | SwiftData | n/a | **A** | Keep |
-| State layer | 20× `ObservableObject` + 23× `@StateObject`; 4× `@Observable` | `@Observable` macro + `@State`/`@Environment` | **Yes** (perf: updates only on read props; tvOS 17+/26) | **B** | Migrate incrementally to `@Observable` |
-| Image loading/cache | custom `CachedAsyncImage` + `ImageCacheManager` (disk TTL/5GB, Plex transcode sizing, token) | `AsyncImage` | **No** (no persistent disk cache / TTL / sizing) | **C** | Keep; document gap |
-| Focus restoration | `FocusMemory` + `FocusRestorationPolicy` | `@FocusState` + `.focusSection` + `prefersDefaultFocus` | **No** (native doesn't persist section focus across data reloads) | **C** | Keep (tested policy) |
-| Focus watchdog / `focusSystem` recovery (TVSidebarView) | custom recovery + UIKit focus poke | native focus engine | **No today** (works around a focus-loss edge) | **D** | Keep; re-test each tvOS release, remove when native stable |
-| Native video player | `AVPlayerViewController` (`NativePlayerViewController`) | same | n/a | **A** | Keep; add delegate for post-play (E4-PR9) |
-| RPlayer (FFmpeg + AVSampleBuffer) | custom pipeline | AVKit/VideoToolbox | **No** (DV P7/P8.6 RPU rewrite, TrueHD/DTS-HD/DTS:X/PCM/FLAC decode, 4K-over-HTTP via URLSessionAVIO) | **C** | Keep as capability fallback |
-| Custom player controls (`PlayerControlsOverlay`/`PlayerProgressBar`/`VideoInfoOverlay`/`TrackSelectionSheet`) | custom SwiftUI | AVKit transport | **No for RPlayer** (RPlayer isn't `AVPlayerViewController`); **N/A for AVKit path (native already used)** | **C** | Keep for RPlayer only; ensure none layer over the native player |
-| Chapters | `navigationMarkerGroups` (`includeChapters=1`) | same | n/a | **A** | Keep (device-verify) |
-| Player external metadata | `item.externalMetadata` (public identifiers, token-safe) | same | n/a | **A** | Keep; minor enrichment backlog |
-| Post-play / next-up | custom SwiftUI overlay over native player | `AVContentProposal` + `AVContentProposalViewController` + delegate (AVKit path) | **Yes on AVKit path** (system-shrunk video, native focus) | **E** | E4-PR9: native proposal on AVKit path + shared decision layer; overlay → RPlayer-only |
-| Top Shelf | `TVTopShelfContentProvider` (local-file handoff) | same | n/a | **A** | Keep |
-| Adaptive tint / badges / status labels | custom SwiftUI (pure policies) | n/a (no native equivalent) | n/a | **C** | Keep (Plex/TMDb-derived, a11y-gated) |
-| Concurrency (DispatchQueue×53 / Task.detached×31 / locks×30) | mixed GCD + structured | actors + structured concurrency | **Partly** (non-FFmpeg sites) | **B/C** | Migrate non-FFmpeg GCD/locks to actors; FFmpeg threading stays **C** |
-| Swift language mode | `SWIFT_VERSION = 5.0` (+ approachable concurrency, `@MainActor` default) | Swift 6 mode | **Yes (goal)** | **E** | Reach Swift 6 mode after concurrency cleanup (`DEBT-E0`-class) |
-| ATS | `NSAllowsArbitraryLoads = true` (+ some exception domains) | scoped `NSExceptionDomains` only | **Partly** (Plex LAN http on dynamic hosts complicates full scoping) | **E** | Tighten toward scoped exceptions; document residual LAN-http constraint (`DEBT-E0-001`) |
-| Privacy manifest | `PrivacyInfo.xcprivacy` present | same | n/a | **A** | Keep; keep matrix current |
-| Token / URL safety | redacted (E4-PR1) | n/a | n/a | **A** | Keep |
+| App / scene / navigation | SwiftUI App + NavigationSplitView/TabView(.sidebarAdaptable)/NavigationStack | same | n/a | **A** | Keep |
+| State layer | ObservableObject + @StateObject (×~50 sites) | `@Observable` + `@State`/`@Bindable`/`@Environment` | Yes (perf, tvOS 17+) | **B** | Incremental migrate |
+| Swift language mode | `SWIFT_VERSION 5.0`, no strict concurrency | Swift 6 + complete checking | Yes (goal) | **E** | After concurrency cleanup |
+| `PlexNetworkManager`/providers `@unchecked Sendable` | unguarded mutable singletons | `actor`/`@MainActor` | Yes | **B/E** | Isolate; data-race risk |
+| FFmpeg/CoreMedia threading (`@unchecked`, locks, Task.detached) | C-callback real-time | actors | No (C interop/real-time) | **C** | Keep |
+| RPlayer / FFmpeg / Dovi / remux / FFmpeg subs | custom pipeline | AVKit | No (DV P7/P8.6, lossless, 4K-HTTP, ASS/PGS) | **C** | Keep (capability fallback) |
+| Native video player | barebones `AVPlayerViewController` | same | n/a | **A** | Keep; add delegate (E4-PR9) |
+| Post-play overlay over native player | custom SwiftUI | `AVContentProposal` (AVKit path) | Yes on AVKit path | **E** | E4-PR9 native proposal + shared decision layer |
+| Chapters / external metadata | `navigationMarkerGroups` / `externalMetadata` | same | n/a | **A** | Keep (device-verify) |
+| Image cache | `CachedAsyncImage`/`ImageCacheManager` | `AsyncImage` | No (no disk/TTL/sizing) | **C** | Keep |
+| Focus restoration | `FocusMemory`/`FocusRestorationPolicy` | `@FocusState`/`.focusSection` | No (no persistence across reloads) | **C** | Keep |
+| Sidebar focus watchdog + swizzle | polling + `class_replaceMethod` | native focus engine | No today (workaround) | **E/D** | Root-cause; retire |
+| TLS trust (`PlexThumbnailService`) | accept any cert, any host | scoped trust / OS eval | Yes | **E** | Fix (security) |
+| TLS trust (Plex scoped) | IP + `.plex.direct` + port-32400 | IP-only bypass; OS eval for `.plex.direct` | Yes (narrower) | **E** | Tighten |
+| Transcode decision/stop requests | `URLSession.shared` | `self.session` (cert delegate) | Yes | **E** | Fix (reliability) |
+| ATS | `NSAllowsArbitraryLoads` | `NSAllowsLocalNetworking` + exceptions | Mostly | **E** | Tighten (App Store) |
+| SwiftData store | bare `Schema` + `fatalError`; dead models | `VersionedSchema` + `SchemaMigrationPlan` | Yes | **E** | Add migration; remove/activate dead models |
+| Settings UI | custom rows (Button-as-Toggle) | native `List`/`Toggle`/`Picker` | Partly (a11y better) | **B/E** | Add a11y or native controls |
+| Top Shelf | `TVTopShelfContentProvider` | same | n/a | **A** | Fix displayAction + server param (D) |
+| Adaptive tint / badges / status labels / design tokens / GlassRowStyle | custom SwiftUI | n/a | n/a | **C** | Keep |
+| AppIntents / Keychain / Vision / OSSignposter | native frameworks | same | n/a | **A** | Keep |
 
 ---
 
-## Findings
+## Findings (consolidated, by domain)
 
-Each: ID · severity · category · files · current · native · capability comparison
-· classification · recommendation · owner · Epic-4-blocker?
+### Security / privacy / config
 
-### NTC-001 — ObservableObject → @Observable (state layer)
-- **Severity:** Medium · **Category:** State/SwiftUI · **Files:** ~20 view models (`UniversalPlayerViewModel`, home/discover/livetv VMs, etc.)
-- **Current:** `ObservableObject` + `@Published` + `@StateObject`/`@ObservedObject`. **Native:** `@Observable` macro + `@State`/`@Environment`/`@Bindable`.
-- **Capability:** native is **equal-or-better** — view updates only when read properties change (perf), tracks optionals/collections, fewer wrappers (Apple Observation doc, tvOS 17+; deployment is 26). No capability lost.
-- **Classification:** **B (should migrate)** · **Recommendation:** incremental migration (Apple-supported; `@StateObject` still accepts `@Observable` during transition). Start with leaf VMs; defer `UniversalPlayerViewModel` until its concurrency is settled. · **Owner:** modernization backlog · **Epic-4 blocker:** No.
+- **NTC-SEC-001 [verified] — `PlexThumbnailService.TrustingSessionDelegate` accepts ANY cert from ANY host.** `Services/Plex/PlexThumbnailService.swift:170`. **E, High.** App-Store rejection risk + MITM on BIF thumbnail fetches. Native: reuse the scoped Plex trust logic (IP-only) or OS evaluation. Epic-4: no; **Epic-5/App-Store blocker.**
+- **NTC-SEC-002 [verified] — Scoped Plex trust bypass too broad.** `PlexNetworkManager.swift:~2649`, `PlexAuthManager.swift:~924`, `ImageCacheManager.swift:~595`: bypass for `.plex.direct` (valid Let's-Encrypt CA — should use OS eval) and **any** port-32400 host. **E, High.** Restrict unconditional trust to IP literals; OS-evaluate `.plex.direct`. Also DRY: 3–4 identical delegates → one shared `PlexSSLTrust`.
+- **NTC-SEC-003 [verified] — Transcode decision/stop use `URLSession.shared`.** `PlexNetworkManager.startTranscodeDecision:~1640`, `stopTranscodeSession:~1703` bypass `self.session`'s cert delegate → silently fail on self-signed/`.plex.direct`/IP servers (errors swallowed). **E, High, functional defect.** Fix: use `self.session`. (Confirmed: both call `URLSession.shared.data(for:)`.)
+- **NTC-SEC-004 [verified] — ATS `NSAllowsArbitraryLoads = true`.** `Info.plist:21`. **E, Medium, App-Store friction.** `NSAllowsLocalNetworking` covers LAN http; `.plex.direct` is https; m3u4u.com already has an exception domain → blanket arbitrary loads is removable. (`DEBT-E0-001`.)
+- **NTC-SEC-005 — Sentry exposure surface.** `tracesSampleRate = 1.0` + `enableSwizzling = true` (`RivuletApp.swift:59/65`) may capture URLSession spans (URLs/query) outside the `beforeSend` sanitiser; scope-closure `setExtra(url.path…)` bypasses `sanitizeSentryEvent` (`PlexLiveTVModels.swift:320/331/421`, `MultiStreamViewModel:296`, `HLSSegmentFetcher:189`). **B, Medium-High.** Lower sample rate; route scope extras through redactor; confirm span scrubbing for the SDK version.
+- **NTC-SEC-006 — Entitlements over-broad.** `remote-notification` background mode + `aps-environment` with no push code; duplicate `aps-environment` keys. **D, Low.** Remove unused.
+- **NTC-SEC-007 — `TMDBConfig.proxyBaseURL` hardcoded personal Worker** (`baingurley.workers.dev`). **G/Medium** for public release (no override/fallback). Secrets otherwise clean (Secrets.swift gitignored). PrivacyInfo present; review `ProductInteraction`/ratingKey disclosure (Low).
 
-### NTC-002 — Swift 6 language mode not enabled
-- **Severity:** High · **Category:** Concurrency/build · **Files:** `Rivulet.xcodeproj/project.pbxproj` (`SWIFT_VERSION = 5.0`)
-- **Current:** Swift 5 mode with `SWIFT_APPROACHABLE_CONCURRENCY` + `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`. **Native:** Swift 6 language mode (full strict concurrency).
-- **Capability:** Swift 6 is the goal (data-race safety). Blocked by the GCD/lock/`Task.detached` surface (NTC-003). No feature lost by migrating; it's gated work.
-- **Classification:** **E (non-conforming vs target)** · **Recommendation:** sequence behind NTC-003; do **not** flip `SWIFT_VERSION` until strict-concurrency-clean (this is a project-setting change — out of current scope). · **Owner:** Epic 5 / dedicated slice · **Epic-4 blocker:** No (but Epic 5 pre-ship).
+### Concurrency / Swift 6
 
-### NTC-003 — GCD / Task.detached / manual locks vs structured concurrency
-- **Severity:** Medium · **Category:** Concurrency · **Files:** 53 `DispatchQueue`, 31 `Task.detached`, ~30 lock/`@unchecked` sites across services/playback.
-- **Current:** mixed GCD + ad-hoc locks. **Native:** `actor` isolation + structured `async`/`await` + `AsyncStream`.
-- **Capability:** for non-FFmpeg sites, actors/structured concurrency are equal-or-better (race safety, cancellation). **FFmpeg/CoreMedia threading** (read loop, AVIO callbacks, renderer) is **C — custom justified** (C-callback threading, real-time constraints native Swift concurrency doesn't model well).
-- **Classification:** **B** (non-FFmpeg) / **C** (FFmpeg) · **Recommendation:** migrate non-FFmpeg GCD/locks to actors incrementally; keep + document FFmpeg threading. · **Owner:** modernization backlog (prereq for NTC-002) · **Epic-4 blocker:** No.
+- **NTC-CON-001 [verified] — `SWIFT_VERSION = 5.0`, no `SWIFT_STRICT_CONCURRENCY`.** All targets. **E, High.** Concurrency guarantees are not compiler-enforced. Target Swift 6 mode after cleanup; do not flip until clean (project-setting → explicit go).
+- **NTC-CON-002 — `PlexNetworkManager: @unchecked Sendable` singleton, unguarded mutable state, called from many actors + `Task.detached`.** **E/B, High.** Make `@MainActor` or `actor`. Primary Swift-6 data-race blocker. Same pattern (lower risk): `TMDBClient`, `PlexProvider`, `PlexMusicProvider`, `HomePerformanceTracer` (NSLock), `FileWatchlistCache`.
+- **NTC-CON-003 — GCD/locks vs structured concurrency:** 53 `DispatchQueue`, 31 `Task.detached`, ~30 lock/`@unchecked`. Non-FFmpeg sites → actors/structured concurrency (**B**); `.receive(on: DispatchQueue.main)` inside `@MainActor` is redundant (×10). FFmpeg/CoreMedia threading (demux read loop, AVIO callbacks, `SampleBufferRenderer` `nonisolated(unsafe)`, remux interrupt ptr, LocalRemuxServer NWConnection locks) → **C, keep**.
+- **NTC-CON-004 — `RivuletPlayer`/FFmpeg "duplicate classes" are `#if !RIVULET_FFMPEG` splits [verified].** **A — not a defect.** (Corrects scanner E1/E2.)
+- Minor: `WatchlistHubRow:89` `await MainActor.run { Task { … } }` double-hop; `NowPlayingService` fire-and-forget remote-command Tasks need `[weak]` audit; `UPVM:1440` NSLock inside `withCheckedContinuation` is redundant.
 
-### NTC-004 — ATS arbitrary loads
-- **Severity:** High · **Category:** Security/privacy/App Store · **Files:** `Rivulet/Info.plist` (`NSAllowsArbitraryLoads = true`)
-- **Current:** blanket arbitrary loads (+ some exception domains). **Native/compliant:** scoped `NSExceptionDomains` with `NSAllowsLocalNetworking` for LAN.
-- **Capability:** Plex servers on dynamic LAN IPs/hostnames over http complicate full scoping, but `NSAllowsLocalNetworking` + scoped exceptions cover the legitimate case without blanket arbitrary loads — equal capability, lower risk.
-- **Classification:** **E (defect)** · **Recommendation:** tighten to `NSAllowsLocalNetworking` + scoped exceptions; document any residual. Existing `DEBT-E0-001`/`KF-E0-001`. · **Owner:** Epic 1/5 security · **Epic-4 blocker:** No (App Store pre-ship).
+### Persistence / models
 
-### NTC-005 — Post-play overlay over native player
-- **Severity:** Medium · **Category:** Playback/HIG · **Files:** `Views/Player/PostVideo/*`, `UniversalPlayerView`
-- **Current:** custom SwiftUI post-play overlay drawn over `AVPlayerViewController`. **Native:** `AVContentProposal` + `AVContentProposalViewController` + `AVPlayerViewControllerDelegate` (AVKit path).
-- **Capability:** native is **better on the AVKit (default) path** (system-shrunk video, native focus/Siri-Remote/auto-accept). RPlayer path can't use it.
-- **Classification:** **E** · **Recommendation:** **E4-PR9** — shared Plex post-play decision layer → native proposal on AVKit path + overlay reused only for RPlayer. (`DEBT-E4-AVKIT-001`.) · **Owner:** Epic 4 · **Epic-4 blocker:** it IS an Epic 4 slice (not a blocker of others).
+- **NTC-DAT-001 [verified] — No SwiftData migration plan + `fatalError` on init.** `RivuletApp.swift:127/143/145`. **E, Critical (data integrity).** Any `@Model` change destroys/drops the store on upgrade. Add `VersionedSchema` + `SchemaMigrationPlan`; replace `fatalError` with graceful reset. **Gates any model change.**
+- **NTC-DAT-002 — Dead persistence graph.** `WatchProgress` + IPTV `@Model`s (`Channel`/`EPGProgram`/`FavoriteChannel`/`IPTVSource`) are schema-registered but never `@Query`-ed/written; Live TV persists via `UserDefaults` JSON (incl. `apiToken` — should be Keychain). **E/B, Medium.** Activate or remove (with migration); move tokens to Keychain.
+- **NTC-DAT-003 — Unstable `Identifiable.id` fallbacks.** `PlexTag`/`PlexExtra`/`PlexHub` use `UUID().uuidString` fallback (new identity every access → ForEach diffing bugs); `PlexRole`/`PlexCrewMember` composite ids collide on "unknown". **C, Medium.** Stable hashes.
+- **NTC-DAT-004 — `try?`-everywhere decoders** in `TMDBListItem`/`TMDBItemDetail` silently swallow decode failures (cast/genres default to `[]`). **C, Low.** Per-field tolerance OK; lose-vs-empty ambiguity noted. `EPGProgram.timeRangeFormatted` allocates a `DateFormatter` per call (**A, perf**). `useApplePlayer` read from `UserDefaults.standard` at 5 sites (not reactive) → single `@AppStorage`.
 
-### NTC-006 — RPlayer / FFmpeg pipeline (custom justified)
-- **Severity:** Low (informational) · **Category:** Playback · **Files:** `Services/Plex/Playback/**`
-- **Current:** FFmpeg demux + VideoToolbox + AVSampleBuffer render. **Native:** AVKit/AVPlayer.
-- **Capability:** native **cannot** match — DV P7 MEL/P8.6 RPU rewrite, TrueHD/DTS-HD/DTS:X/PCM/FLAC client decode, 4K HEVC/DV over plain HTTP (`URLSessionAVIOSource`). Removing it = feature loss.
-- **Classification:** **C (custom justified)** · **Recommendation:** keep as the capability fallback; AVKit-first routes everything else to native (E4-PR3/PR6). · **Epic-4 blocker:** No.
+### Playback
 
-### NTC-007 — CachedAsyncImage / ImageCacheManager (custom justified)
-- **Severity:** Low · **Category:** Images · **Files:** `Views/Components/CachedAsyncImage.swift`, `Services/Cache/ImageCacheManager.swift`
-- **Current:** custom disk cache (2-week TTL, 5GB), Plex `/photo/:/transcode` sizing, actor-isolated. **Native:** `AsyncImage` (memory only, no TTL/disk/sizing).
-- **Capability:** native **cannot** match (no persistent cache, no sizing control). Removing it regresses scroll perf + bandwidth.
-- **Classification:** **C** · **Recommendation:** keep; it's already actor-backed (native concurrency). · **Epic-4 blocker:** No.
+- **NTC-PLY-001 — Post-play overlay over native player → native `AVContentProposal`.** **E** → E4-PR9 (already tracked `DEBT-E4-AVKIT-001`).
+- **NTC-PLY-002 — RPlayer / FFmpeg / Dovi / FFmpegAudioDecoder / URLSessionAVIOSource / FFmpeg subtitles / LocalRemux / DisplayCriteriaManager / NowPlayingService.** **C, custom justified** — native cannot match DV P7/P8.6, TrueHD/DTS-HD/DTS:X/PCM/FLAC, 4K-over-HTTP, ASS/PGS, or `AVDisplayManager`/Now-Playing driving for the sample-buffer path. Keep.
+- **NTC-PLY-003 — Dead player code [scanner].** `PlayerProgressBar.swift`, `TrackSelectionSheet.swift`, `VideoInfoOverlay.swift` have no live call sites (transport/track/info are inline in `PlayerControlsOverlay`). **D.** Confirm then remove.
+- **NTC-PLY-004 — AVPlayer-via-`AVPlayerLayerView` mixed path** (custom controls + manual Now Playing on AVPlayer content when not `useApplePlayer`) is architecturally inconsistent vs the clean `NativePlayerViewController` path. **B/E, Medium.** Clarify/route through native VC where possible.
+- **NTC-PLY-005 — Defects [scanner]:** `UPVM:1929` `segments.first!` force-unwrap; `UPVM:1908` `as! AVMetadataItem`; `PlayerControlsOverlay:559` deprecated `UIScreen.main`; ~14 `DispatchQueue.main.asyncAfter` focus-timing hacks; `print()` of internal state (route through `playerDebugLog`); `NowPlayingService:544` inline token-in-URL (cache key — keep out of logs). **C/E, Low-Medium.**
 
-### NTC-008 — FocusMemory / FocusRestorationPolicy (custom justified) + watchdog (temporary)
-- **Severity:** Low · **Category:** Focus · **Files:** `Services/Focus/FocusMemory.swift`, `FocusRestorationPolicy`, `Views/TVNavigation/TVSidebarView.swift`
-- **Current:** custom section-focus persistence across data reloads + a `focusSystem` recovery watchdog. **Native:** `@FocusState`/`.focusSection`/`prefersDefaultFocus`.
-- **Capability:** native primitives are used everywhere they suffice; the custom layer covers what native does **not** — restoring focus to a remembered item after a list refresh, and recovering from a focus-loss edge. The recovery watchdog is a workaround.
-- **Classification:** `FocusMemory`/policy = **C**; recovery watchdog = **D (temporary)** · **Recommendation:** keep the tested policy; re-test the watchdog each tvOS release and retire if native stabilises. · **Epic-4 blocker:** No.
+### Navigation / focus
 
-### NTC-009 — Custom player controls scope check
-- **Severity:** Low · **Category:** Playback/HIG · **Files:** `PlayerControlsOverlay`/`PlayerProgressBar`/`VideoInfoOverlay`/`TrackSelectionSheet`
-- **Current:** custom controls. **Native:** AVKit transport (already used on the AVPlayer path).
-- **Capability:** native covers the `AVPlayerViewController` path (already native); custom controls are required for the **RPlayer** path (not an AVPlayerViewController).
-- **Classification:** **C (RPlayer-only)** · **Recommendation:** keep for RPlayer; **verify** none of these are layered over the native player (only NTC-005's post-play overlay is — fix there). · **Epic-4 blocker:** No.
+- **NTC-FOC-001 [scanner] — `TVSidebarView.focusRecoveryWatchdog`** polls `windowScene.focusSystem.focusedItem` every 1.5s and `resetFocus` if nil. **E, High.** Fragile, masks an un-root-caused focus loss; non-exhaustive overlay guard. Root-cause + targeted reset.
+- **NTC-FOC-002 [scanner] — `installSidebarFocusGuard`/`overrideSidebarFocusBehavior`** runtime-swizzles `shouldUpdateFocus(in:)` on an internal `UICollectionView` subclass found via a width<500/x=0 heuristic. **E, High.** Undefined behaviour across SDKs; applies globally to that class; breaks on sidebar restructure. Replace with `.focusSection()` containment / native API.
+- **NTC-FOC-003 — `FocusMemory`/`FocusRestorationPolicy` (C, justified)** and `NestedNavigationState` (C, justified — no native nested-push signal). `FocusContainedView`/`LiveTVPressCatcher`/`PreviewContainerViewController` UIKit interop (C, justified). DRY: `FocusContainedView` duplicated in Settings + Music (Music uses the weaker `shouldUpdateFocus` approach the Settings comment says is insufficient) — **E, consolidate.**
+- **NTC-FOC-004 — Player/preview launch + `presentPreview` boilerplate triplicated** across Home/Library/Discover via `UIApplication.shared.connectedScenes` VC-walk (8 sites). **C/E (DRY), Medium.** One `WindowPresenter`.
 
-### NTC-010 — Observation/`@Observable` already used (conforming)
-- **Severity:** info · 4 types already use `@Observable` (the recent policy/tint/status work). **A.** Continue the pattern for new code; it's the migration target for NTC-001.
+### Content / media UI
+
+- **NTC-UI-001 [scanner] — Missing accessibility on primary grid items.** `MediaPosterCard`, `DiscoverTile`, EPG `ProgramCell` have no `.accessibilityLabel` (contrast: `ContinueWatchingCard`/`LandscapeContentCard` do). **E, High (a11y).**
+- **NTC-UI-002 — `UIScreen.main.bounds` for hero height** (`PlexHomeView:693`, `PlexLibraryView:473`, `DiscoverView:39`) — deprecated; `GeometryReader` already present. **A, Low.**
+- **NTC-UI-003 — Manual focus rings duplicating native** (`SeasonPillButton`, `EpisodeCard` thumbnail border) → `.buttonStyle(.card)`/`.hoverEffect`. **B, Low.** Custom EPG grid / Preview carousel / Hero two-layer / `AppStoreActionButtonStyle` / dual-focus EpisodeCard = **D/C justified** (no native equivalent).
+- **NTC-UI-004 — `MediaDetailView.swift` 3825 lines** (type-checker budget comments) → extract sub-views. **E, High (maintainability).** Dead/divergent: `ContentRow`, `searchField`, `ParallaxPosterImage/LayerStack`, `computeProcessedHubs` divergence Home vs Library. `DiscoverView` uses `fullScreenCover` vs NavigationStack elsewhere (inconsistent).
+
+### Services (non-playback)
+
+- **NTC-SVC-001 — `PlexNetworkManager` 2719-line God object** (auth/discovery/browse/streaming/LiveTV/progress/XML). **E, architecture.** Extract domain clients (pattern already started: `PlexWatchlistAPI`/`PlexTimelineReporter`).
+- **NTC-SVC-002 — Regex-per-call hotspots:** `M3UParser.extractAttribute` (~3000 compiles/500-ch playlist), `PlexNetworkManager.parseHomeUsersXML`, `PlexAuthManager.extractPlexDirectHash` (locale-fragile). **A/B, perf.** Static `Regex`/`XMLParser`.
+- **NTC-SVC-003 [scanner] — `XMLTVParser` drops timezone offsets** (hardcodes UTC for `yyyyMMddHHmmss ±HHMM`). **E, Medium (EPG times wrong in non-UTC feeds).**
+- **NTC-SVC-004 — `CacheManager` `NSCache` no `totalCostLimit`** (count-only, unbounded bytes → jetsam risk). **C, Medium.** `PersonalizedRecommendationService` serial per-candidate TMDB fetch → `withTaskGroup` (**C, Medium**). `ImageCacheManager`/`CachedAsyncImage`/Keychain/Vision/AppIntents/OSSignposter = **A/C justified, clean.**
+
+### Settings / Top Shelf / a11y
+
+- **NTC-SET-001 [scanner] — Settings: zero VoiceOver annotations.** `SettingsToggleRow` is a Button-as-Toggle with no `.isToggle`/`.accessibilityValue`; pickers no value; chevrons not hidden. **E, High (a11y).** Add traits or adopt native `Toggle`/`Picker`.
+- **NTC-SET-002 [scanner] — Top Shelf:** `displayAction = playAction` (highlight may trigger playback) and the `&server=` param is ignored by `DeepLinkHandler` (multi-server → wrong/failed item). **D/E, Medium** (the latter is a multi-server correctness defect). Also localise `section.title`; use `subtitle`.
+- **NTC-SET-003 — Increase Contrast / Reduce Motion only in a few views** (`AdaptiveTintLayer` exemplary). `GlassRowBackground` 0.08 resting fill may fail Increase Contrast. **E, Medium (a11y systemic).** `PlaybackInputCoordinator`/design-tokens/badges = **A/C justified.**
 
 ---
 
 ## Remediation roadmap (no parity reduction)
 
-**Priority 1 — defects / Epic-4-relevant / risk:**
-1. **NTC-005 / E4-PR9** native post-play (`AVContentProposal`) — fixes the native deviation; planned Epic 4 slice.
-2. **NTC-004** ATS scoping (`NSAllowsLocalNetworking` + exceptions) — App Store/security; Epic 1/5. (Project-setting change → explicit go.)
+**Priority 1 — defects / security / App-Store (schedule regardless of Epic):**
+1. NTC-SEC-001 unconditional TLS trust (`PlexThumbnailService`) — **App-Store/security.**
+2. NTC-SEC-002 tighten Plex trust scope (IP-only; OS-eval `.plex.direct`) + DRY one delegate.
+3. NTC-SEC-003 transcode requests use `self.session` — **functional defect.**
+4. NTC-DAT-001 SwiftData `VersionedSchema`+`SchemaMigrationPlan` + graceful init — **data integrity; gates model changes.**
+5. NTC-SEC-004 ATS scoping; NTC-SEC-005 Sentry sample-rate/span scrubbing.
 
-**Priority 2 — native migrations, no feature loss:**
-3. **NTC-003** non-FFmpeg GCD/locks → actors/structured concurrency (prereq for NTC-002).
-4. **NTC-002** Swift 6 language mode (after NTC-003). (Project-setting → explicit go; Epic 5.)
-5. **NTC-001** `ObservableObject` → `@Observable` (incremental; leaf VMs first).
+**Priority 2 — native migrations / defects, no feature loss:**
+6. NTC-FOC-001/002 root-cause the sidebar focus loss; retire the watchdog + swizzle.
+7. NTC-PLY-001 / E4-PR9 native post-play `AVContentProposal`.
+8. NTC-CON-002 isolate `PlexNetworkManager` + providers (actor/@MainActor); NTC-CON-003 non-FFmpeg GCD→structured; then NTC-CON-001 Swift 6 mode.
+9. NTC-UI-001 / NTC-SET-001 / NTC-SET-003 accessibility (grid cards, EPG cells, settings, contrast/motion).
+10. NTC-SVC-003 XMLTV timezone; NTC-SVC-004 cache cost limit + recommendation task-group; NTC-DAT-002 dead persistence graph (activate/remove + Keychain tokens).
 
-**Priority 3 — polish / backlog:**
-6. AVKit metadata enrichment (release date, S/E identifiers) — `DEBT-E4-AVKIT-001`.
-7. Focus watchdog (NTC-008 D) re-test/retire per tvOS release.
-8. On-device verification of already-native metadata/chapters/GUI (`DEBT-E0-007/008`).
+**Priority 3 — polish / debt:**
+11. NTC-CON / NTC-DAT-003 `@Observable` migration + stable ids.
+12. NTC-UI-004 / NTC-SVC-001 split God-objects; NTC-FOC-004 shared `WindowPresenter`; NTC-PLY-003 remove dead player files (after confirmation).
+13. Entitlement trim, hardcoded proxy override, localisation, metadata enrichment.
 
-Items deliberately **NOT** recommended for change (native cannot match): RPlayer/
-FFmpeg (NTC-006), image disk cache (NTC-007), FocusMemory policy (NTC-008 C),
-RPlayer custom controls (NTC-009), adaptive tint/badges/status labels.
+**Custom kept (native cannot match — no change):** RPlayer/FFmpeg/Dovi/remux/FFmpeg-subs, image disk cache, FocusMemory policy, adaptive tint/badges/status labels/design tokens, EPG grid, preview carousel, hero two-layer, AppIntents/Keychain/Vision/OSSignposter, IP-scoped self-signed trust (the legitimate Plex case).
 
 ---
 
 ## Epic 4 blockers
 
-**None of these findings block Epic 4's remaining pure-policy slices (E4-PR5).**
-NTC-005 *is* an Epic 4 slice (E4-PR9), not a blocker. The AVKit-first default flip
-(E4-PR6) remains gated on the media corpus + physical Apple TV, unchanged by this
-audit. NTC-002/004 are Epic 5 pre-ship.
+**No finding blocks Epic 4's remaining pure-policy slices (E4-PR5).** NTC-PLY-001 is
+the E4-PR9 slice. The AVKit default flip (E4-PR6) stays corpus/device-gated.
+NTC-SEC-003 (transcode `URLSession.shared`) is a playback **reliability** defect on
+self-signed servers worth fixing before the flip's device validation. The
+security/ATS/SwiftData/a11y items are **Epic-5 pre-ship / App-Store** blockers, not
+Epic-4 blockers.
 
-*Rivulet is a distinct Plex/TMDb tvOS app — no Apple branding/private APIs/partner
-claims. No functionality is recommended for removal to become "more native".*
+*Method note: aggregated from 8 read-only domain sweeps; the four highest-severity
+new claims were code-verified this pass. Items marked [scanner] carry file:line and
+should be confirmed at fix time (root-cause-first). No functionality is recommended
+for removal to become "more native"; every retained-custom item has a stated
+capability reason. No code, settings, or playback changed.*
