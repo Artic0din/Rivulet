@@ -26,6 +26,12 @@ struct MediaItem: Identifiable, Hashable, Sendable {
     let grandparentRef: MediaItemRef?    // episode → show
     let episodeNumber: Int?              // episodes only — Plex `index`
     let seasonNumber: Int?               // episodes/seasons only — Plex `parentIndex`
+    /// Original air / release date (Plex `originallyAvailableAt`), parsed to a
+    /// UTC calendar day. Defaulted so existing construction sites are unaffected.
+    /// Used by the episode-card content-status label (ADO-05). nil when unknown.
+    /// `var` with a default so existing memberwise-init call sites compile
+    /// unchanged while providers can populate it.
+    var airDate: Date? = nil
     let childProgress: ChildProgress?    // shows/seasons only — for "12/24 watched"
 
     let userState: MediaUserState
@@ -55,6 +61,7 @@ extension MediaItem {
             grandparentRef: grandparentRef,
             episodeNumber: episodeNumber,
             seasonNumber: seasonNumber,
+            airDate: airDate,
             childProgress: childProgress,
             userState: userState,
             artwork: MediaArtwork(

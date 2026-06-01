@@ -206,3 +206,39 @@ never ran. Both fixed:
 
 The model + placement already encode (2) as data-backed today, so a follow-up can
 ship episode-card `seasonFinale` immediately without touching this architecture.
+
+### ADO-05 (2026-06-01) — episode-card adoption (LIVE)
+
+Episode cards now consume the system at their `episodeCard` placement, completing
+the label system across hero + detail + episode cards.
+
+- **Helper:** `EpisodeCardPresentation.episodeStatusLabel(episodeIndex:seasonNumber:seasonEpisodeCount:airDate:reference:)`
+  — pure and deterministic (caller passes `reference`). Builds a per-episode
+  `ContentStatusInput`, classifies with `ContentStatusPolicy`, and keeps the
+  result only if `ContentStatusPlacement.allows(_, on: .episodeCard)`. So only
+  `seasonFinale` / `episodeAvailableToday` / `newEpisode` can surface; show-level
+  editorial labels are filtered out, and `recentlyAdded` is intentionally not
+  permitted on episode cards (the row already carries that context).
+- **Data (Plex only, no new fetch):** `episodeIndex` = `MediaItem.episodeNumber`
+  (Plex `index`); `seasonNumber` = `MediaItem.seasonNumber` (Plex `parentIndex`);
+  `seasonEpisodeCount` computed by `MediaDetailView` from the already-loaded
+  episode list grouped by season; `airDate` added to `MediaItem` from Plex
+  `originallyAvailableAt` (parsed to a UTC day in `PlexMediaMapper`).
+- **Guards (truthful by construction):** specials / season 0 (and unknown season)
+  never read as a finale (finale inputs withheld unless season ≥ 1); a finale
+  needs a valid index AND season count (`count > 0 && index == count`); future air
+  dates never produce today/new (`airedDaysAgo` is a UTC calendar-day delta,
+  negative for the future; the policy fires only on `0` or `1…14`).
+- **Placement / UI:** a small uppercase capsule above the title in the description
+  column (secondary to the title, not on the play button, not in the metadata
+  line, not floating). Folded into the play control's combined VoiceOver label
+  only when visible; the visible chip is `accessibilityHidden` to avoid a
+  duplicate announcement.
+- **Tests:** `EpisodeCardStatusLabelTests` (finale present/absent across the four
+  guard failures; today/new only for valid present dates; stale/future yield no
+  label; finale precedence over a recent air date) + accessibility include/omit
+  cases in `EpisodeCardPresentationTests`.
+
+Renewed-without-date ("Another Season Is Coming") remains a **hero/detail**
+concept (not an episode-card label) and is still a future model addition — see
+`DEBT-E3-ADO03-001`.

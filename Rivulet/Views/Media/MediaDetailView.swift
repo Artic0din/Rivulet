@@ -1818,6 +1818,20 @@ struct MediaDetailView: View {
         return []
     }
 
+    /// Episodes-per-season counts (keyed by the season's ref id) derived from the
+    /// already-loaded episode lists — no extra fetch. Backs the episode-card
+    /// "Season Finale" label (ADO-05): a complete season's count equals its
+    /// episode total, so `episodeIndex == count` marks the finale. An incomplete
+    /// library yields a conservative count and simply doesn't fire the signal.
+    private func episodeCounts(in list: [MediaItem]) -> [String: Int] {
+        list.reduce(into: [:]) { acc, item in
+            guard let key = item.parentRef?.itemID else { return }
+            acc[key, default: 0] += 1
+        }
+    }
+    private var unifiedSeasonEpisodeCounts: [String: Int] { episodeCounts(in: unifiedEpisodes) }
+    private var seasonEpisodeCounts: [String: Int] { episodeCounts(in: episodes) }
+
     /// Unified horizontal episode card row across all seasons
     private var unifiedEpisodeList: some View {
         Group {
@@ -1838,6 +1852,7 @@ struct MediaDetailView: View {
                                     authToken: authManager.selectedServerToken ?? "",
                                     focusedEpisodeId: $focusedEpisodeId,
                                     showSeasonPrefix: seasons.count > 1,
+                                    seasonEpisodeCount: episode.parentRef.flatMap { unifiedSeasonEpisodeCounts[$0.itemID] },
                                     onPlay: {
                                         presentPlay(for: episode) { fromBeginning in
                                             selectedEpisodeItem = episode
@@ -1913,6 +1928,7 @@ struct MediaDetailView: View {
                                 serverURL: authManager.selectedServerURL ?? "",
                                 authToken: authManager.selectedServerToken ?? "",
                                 focusedEpisodeId: $focusedEpisodeId,
+                                seasonEpisodeCount: episode.parentRef.flatMap { seasonEpisodeCounts[$0.itemID] },
                                 onPlay: {
                                     presentPlay(for: episode) { fromBeginning in
                                         selectedEpisodeItem = episode
@@ -3311,6 +3327,10 @@ struct EpisodeCard: View {
     let authToken: String
     var focusedEpisodeId: FocusState<String?>.Binding?
     var showSeasonPrefix: Bool = false
+    /// Total episodes in this episode's season, computed by the parent from the
+    /// already-loaded episode list (no extra fetch). Backs the "Season Finale"
+    /// content-status label (ADO-05); nil disables the finale signal.
+    var seasonEpisodeCount: Int? = nil
     let onPlay: () -> Void
     var onRefreshNeeded: MediaItemRefreshCallback? = nil
     var onShowInfo: MediaItemNavigationCallback? = nil
@@ -3333,6 +3353,21 @@ struct EpisodeCard: View {
     /// Infuse — in-progress episodes stay blurred until fully watched.
     private var blurForSpoilers: Bool {
         hideSpoilersForUnwatched && !episode.isWatched
+    }
+
+    /// ADO-05: the single Plex-backed content-status label for this card, or nil.
+    /// `Date()` is read at render time (view layer only); every decision lives in
+    /// the pure, tested `EpisodeCardPresentation.episodeStatusLabel`. Only
+    /// per-episode labels (Season Finale / New Episode Today / New Episode) can
+    /// surface here — `episodeStatusLabel` enforces the `episodeCard` placement.
+    private var contentStatusLabel: ContentStatusLabel? {
+        EpisodeCardPresentation.episodeStatusLabel(
+            episodeIndex: episode.episodeNumber,
+            seasonNumber: episode.seasonNumber,
+            seasonEpisodeCount: seasonEpisodeCount,
+            airDate: episode.airDate,
+            reference: Date()
+        )
     }
 
     var body: some View {
@@ -3403,6 +3438,7 @@ struct EpisodeCard: View {
             .accessibilityLabel(EpisodeCardPresentation.accessibilityLabel(
                 episodeLabel: episodeLabel,
                 title: episode.title.isEmpty ? "Episode" : episode.title,
+                statusLabel: contentStatusLabel,
                 runtime: episode.durationFormatted,
                 isWatched: episode.isWatched,
                 progress: episode.watchProgress
@@ -3419,6 +3455,23 @@ struct EpisodeCard: View {
                         .foregroundStyle(descriptionFocused ? .black.opacity(0.6) : .white.opacity(0.6))
                         .textCase(.uppercase)
                         .padding(.top, 10)
+
+                    // ADO-05: restrained, secondary status chip above the title.
+                    // Folded into the play button's combined VoiceOver label, so
+                    // hidden from the accessibility tree here to avoid a duplicate.
+                    if let status = contentStatusLabel {
+                        Text(status.displayText)
+                            .font(.system(size: 12, weight: .semibold))
+                            .textCase(.uppercase)
+                            .foregroundStyle(descriptionFocused ? .black.opacity(0.8) : .white.opacity(0.9))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule().fill(descriptionFocused ? .black.opacity(0.12) : .white.opacity(0.18))
+                            )
+                            .padding(.top, 2)
+                            .accessibilityHidden(true)
+                    }
 
                     Text(episode.title.isEmpty ? "Episode" : episode.title)
                         .font(.system(size: 20, weight: .bold))

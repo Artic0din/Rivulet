@@ -152,3 +152,28 @@ Blocking items before Epic 4:
    simulator/device** (the missing fair test), starting with **ADO-01 (episode
    cards in detail)** as the clearest visual win.
 4. Keep Epic 4 gated until the blocking items clear.
+
+---
+
+## Adoption progress update (2026-06-01)
+
+The adoption slices this audit asked for have since shipped and been validated by
+Ryan on device:
+
+- **ADO-01 / ADO-01B** — episode cards live in detail (combined VoiceOver), dead
+  parallel card retired.
+- **ADO-02 → landscape-shelf settle** — Recently Added is a landscape shelf;
+  poster→landscape interaction dropped by product decision.
+- **ADO-03** — Content Status Label System (architecture + placement + tests).
+- **ADO-04** — TMDb-backed status labels live on Home hero + detail page;
+  `includeGuids=1` everywhere; hero auto-rotates.
+- **ADO-05 (this slice)** — episode-card status labels live (Season Finale / New
+  Episode Today / New Episode), Plex-backed, placement-gated, guarded, tested.
+
+So the content-presentation visibility gap that triggered this audit is now
+substantially closed in production. Remaining: the Apple-TV-reference visual
+polish (adaptive tint, rounded rating badge → ADO-06 / `DEBT-E3-APPLEREF-001`),
+broader card-row migration + technical-badge spread (`DEBT-E3-PR7-001`), the
+renewed-no-date hero/detail case (`DEBT-E3-ADO03-001`), and on-device a11y +
+performance capture (`DEBT-E0-007`). **Epic 4 remains gated** until Epic 3 closes
+and the playback preconditions clear.

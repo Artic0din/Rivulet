@@ -413,6 +413,8 @@ Technical display badges already exist on landscape cards; rating-badge styling 
 
 Recommendation: **ADO-05 = episode-card status labels**, optionally including the renewed-no-date model case (documentation/model-only). No implementation in this audit pass.
 
+**Update (2026-06-01):** ADO-05 shipped as recommended — episode cards now surface `seasonFinale` / `episodeAvailableToday` / `newEpisode` from Plex-only data (pure `EpisodeCardPresentation.episodeStatusLabel`, placement-gated to `episodeCard`), with specials/missing-data guards, accessibility folded into the play control's combined label, and tests. No TMDb/provider/playback change. The renewed-no-date case was *not* taken (it remains a hero/detail concept). The next visual-system items (adaptive tint, rounded rating badge) stay queued as ADO-06 / `DEBT-E3-APPLEREF-001`.
+
 ---
 
 ## 19. Debt updates
