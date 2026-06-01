@@ -34,6 +34,10 @@ struct HeroOverlayContent: View {
     /// bookmark icon reflect reality after a successful add.
     @State private var resolvedForWatchlistCache: [String: PlexMetadata] = [:]
     @State private var isResolvingPlay: Bool = false
+    /// ADO-04: resolved content-status labels keyed by item ratingKey. Populated
+    /// lazily (cached, off the main thread) for the displayed hero item from its
+    /// TMDb status detail. Absent key = no label (graceful).
+    @State private var statusLabels: [String: ContentStatusLabel] = [:]
     /// Lags behind `currentIndex` by `slideSwapDelay` so the backdrop has
     /// time to crossfade before the logo/metadata/buttons swap in.
     @State private var displayedIndex: Int = 0
@@ -97,7 +101,8 @@ struct HeroOverlayContent: View {
                         HeroSlideContent(
                             item: item,
                             serverURL: serverURL,
-                            authToken: authToken
+                            authToken: authToken,
+                            statusLabel: statusLabels[item.ratingKey ?? ""]
                         )
                         .id(item.ratingKey ?? "idx-\(displayedIndex)")
                         .transition(.opacity)
@@ -185,6 +190,29 @@ struct HeroOverlayContent: View {
             guard !Task.isCancelled, rotationActive else { return }
             advance()
         }
+        // ADO-04: resolve the content-status label for the displayed hero item
+        // (cached; no label when data is missing). Keyed on the displayed item so
+        // rotation re-reads the cache without refetching.
+        .task(id: displayedItem?.ratingKey) {
+            await resolveStatusLabel(for: displayedItem)
+        }
+    }
+
+    /// Resolves a hero-eligible content-status label for `item` from its TMDb
+    /// status detail (reusing the cached `tmdb/details/{id}` payload). Stores
+    /// nothing when there is no tmdbId, no data, or no qualifying/hero-allowed
+    /// label — the hero then shows no chip.
+    private func resolveStatusLabel(for item: PlexMetadata?) async {
+        guard let item, let key = item.ratingKey,
+              statusLabels[key] == nil,
+              let tmdbId = item.tmdbId else { return }
+        let kind = TMDBContentStatus.kind(fromPlexType: item.type)
+        let type: TMDBMediaType = (item.type == "movie") ? .movie : .tv
+        guard let detail = await TMDBDiscoverService.shared.fetchStatusDetail(tmdbId: tmdbId, type: type) else { return }
+        let input = TMDBContentStatus.input(from: detail, kind: kind)
+        guard let label = ContentStatusPolicy.classify(input, reference: Date()),
+              ContentStatusPlacement.allows(label, on: .hero) else { return }
+        statusLabels[key] = label
     }
 
     // MARK: - Paging Dots

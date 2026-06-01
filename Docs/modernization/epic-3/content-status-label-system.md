@@ -142,8 +142,39 @@ Effort: **low–medium, decode/model-only.** Tracked as **DEBT-E3-ADO03-001**.
 
 ## 6. Live adoption status
 
-**Not adopted in UI this slice (Option A).** Recommended adoption once TMDb
-fields exist:
+### ADO-04 update (2026-06-01) — Hero adoption LIVE (data-contingent)
+
+The TMDb status fields are now **decoded** (`TMDBStatusDetail`) from the same
+`tmdb/details/{id}` payload the app already fetches, bridged to `ContentStatusInput`
+(`TMDBContentStatus`), and surfaced on the **Home hero** above the title
+(`HeroSlideContent.statusChip`). Resolution is per displayed hero item, cached on
+disk, off the main thread, and rotation-stable (keyed by ratingKey). The chip
+appears only when `ContentStatusPolicy` returns a hero-eligible label and hides
+otherwise — no chip on missing/stale data, no "Recently Added" noise (past-facing
+Plex inputs are deliberately not fed to the hero).
+
+Reference screenshots (Apple TV) reviewed for ADO-04 map to our labels:
+| Apple TV reference | Our label |
+| --- | --- |
+| "New Season 5 Aug" | `newSeason(date)` → "New Season \<MMM yyyy\>" |
+| "All Episodes Now Available" | `allEpisodesAvailable` → "All Episodes Available" |
+| "New Episode Every Friday" | `newEpisodeWeekly(weekday)` |
+| "Premieres Friday" / "Returns 12 Sep" | `premieres(date)` / `returns(date)` |
+| **"#1 Show on Apple TV"** | **NOT modelled — Apple ranking/branding claim, intentionally excluded** |
+| "Another Season Is Coming" (renewed, no date) | not yet modelled — future `renewed` case (no date) — candidate follow-up |
+
+**Data contingency (honest):** live appearance depends on the backend
+`tmdb/details/{id}` proxy actually passing these TMDb fields through. That proxy
+is server-side and could not be verified from the client in this environment. If
+it projects a subset, `fetchStatusDetail` decodes nils and the hero simply shows
+no chip (graceful). On-device confirmation is the validation step (and also tells
+us whether the proxy passthrough holds). Tracked in `DEBT-E3-ADO03-001`.
+
+`newEpisodeWeekly` is modelled but not yet emitted (weekly-cadence inference from
+episode air dates is deferred — not faked). "Another Season Is Coming" (renewed
+without a date) is a candidate future case.
+
+### Recommended further adoption
 1. Hero — premieres/returns/newSeason/comingSoon/allEpisodesAvailable (the
    high-value editorial line).
 2. Episode cards — seasonFinale (already data-backed via Plex; a clean, low-risk

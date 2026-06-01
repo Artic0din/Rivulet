@@ -13,6 +13,10 @@ struct HeroSlideContent: View {
     let item: PlexMetadata
     let serverURL: String
     let authToken: String
+    /// Editorial content-status label (ADO-04). Shown above the title when the
+    /// `ContentStatusPolicy` returns a hero-eligible, data-backed label; nil
+    /// otherwise (no chip, no clutter).
+    var statusLabel: ContentStatusLabel? = nil
 
     private var logoURL: URL? {
         guard let path = item.clearLogoPath else { return nil }
@@ -54,6 +58,9 @@ struct HeroSlideContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if let statusLabel {
+                statusChip(statusLabel.displayText)
+            }
             titleView
             metadataRow
             if let tagline {
@@ -66,6 +73,21 @@ struct HeroSlideContent: View {
                     .padding(.top, 4)
             }
         }
+    }
+
+    /// Small editorial status pill. Restrained per the design guide — a single
+    /// short line above the title, never a row of chips.
+    private func statusChip(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 15, weight: .bold))
+            .tracking(0.5)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous).fill(Color.white.opacity(0.16))
+            )
+            .accessibilityLabel(text)
     }
 
     @ViewBuilder
