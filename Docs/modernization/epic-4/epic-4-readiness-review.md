@@ -133,6 +133,14 @@ redacted, structured logger) and `KF-E0-004` remain open across playback.
 
 *(No issues fixed in this pass — findings only.)*
 
+**Update (E4-PR1, 2026-06-01):** done. The exhaustive audit found one residual
+console leak (`FFmpegDemuxer:235` logged `url.absoluteString`) — fixed to
+`lastPathComponent` — and verified every other playback log/Sentry sink carries no
+token/full URL. Regression tests added (`PlaybackObservabilityTests`).
+`E0-OBS-002` **CLOSED**; `E0-OBS-003` **REDUCED** (security resolved; broad
+`print()` migration remains as `DEBT-E1-PR1-006`/`KF-E0-004`). See
+`playback-observability-audit.md`.
+
 ---
 
 ## Scope 3 — Playback Capability Inventory
