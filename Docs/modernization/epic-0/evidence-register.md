@@ -913,3 +913,18 @@ watchlist write copy already safe; `DEBT-E1-PR10-001` carried (boundary-blocked)
 | E3-PR5-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `DiscoverPresentationTests` (4) + `RenderStateResolverTests` (12) pass | `xcodebuild … -only-testing:…` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure-logic coverage |
 | E3-PR5-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
 | E3-PR5-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `DiscoverPresentation.swift` (new), `DiscoverView.swift` (VM props + overlay), `ContentStateView.swift` (`discoverEmpty`) + test + audit doc; no Epic 1/provider/watchlist-write/playback change | working-tree diff + scope scans | Reviewed | Pending | Presentation only |
+
+## Epic 3 PR 6 Evidence Entries (Content Presentation System — policy foundation)
+
+E3-PR6 adds the pure, tested Content Presentation System policy layer per the
+2026-06-01 scope expansion. No playback coupling (presentation inputs only).
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E3-PR6-STYLE-001 | Content Presentation | 2026-06-01 | Epic 3 owner | `ContentPresentationStyle` enum (landscape/poster/posterExpandsToLandscape, default poster) + `resolveStyle` degrading to poster without landscape art; centralized, enum-based (no raw bools) | `Rivulet/Views/Components/ContentPresentationPolicy.swift` | Gate Satisfying | Pending | Future-proof for new styles |
+| E3-PR6-FALLBACK-001 | Content Presentation | 2026-06-01 | Epic 3 owner | `TitleTreatmentPolicy` (Plex→TMDb→TVDb→text) + `ArtworkFallbackPolicy` (landscape→backdrop→poster→placeholder); never blocks render | `Rivulet/Views/Components/ContentPresentationPolicy.swift` | Gate Satisfying | Pending | Logo + artwork fallback orders |
+| E3-PR6-BADGES-001 | Content Presentation | 2026-06-01 | Epic 3 owner | `TechnicalBadgePolicy`: resolution→video→audio order, one-per-dimension, `highestPriority` de-spam; `RuntimeFormatter`; `ContentRatingPresentation` | `Rivulet/Views/Components/ContentPresentationPolicy.swift` | Gate Satisfying | Pending | Presentation strings only; no playback coupling |
+| E3-PR6-HIERARCHY-001 | Content Presentation | 2026-06-01 | Epic 3 owner | `MetadataHierarchyPolicy.build` → canonical hierarchy (title → Rating·Year·Runtime → badges → description), deterministic + nil-filtered | `Rivulet/Views/Components/ContentPresentationPolicy.swift`, `Docs/modernization/epic-3/content-design-language.md` | Gate Satisfying | Pending | Documented + reusable |
+| E3-PR6-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `ContentPresentationPolicyTests` (17): style degrade, title/artwork fallback order, runtime/rating formatting, badge order + priority pick, hierarchy assembly + nil-filtering | `xcodebuild … -only-testing:RivuletTests/ContentPresentationPolicyTests` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure-logic coverage |
+| E3-PR6-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+| E3-PR6-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `ContentPresentationPolicy.swift` (new) + test + design-doc extension; no view rendering change yet (E3-PR7), no playback/Epic 1/project-setting/rename | working-tree diff + scope scans | Reviewed | Pending | Policy foundation only |

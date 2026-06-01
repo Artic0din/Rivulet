@@ -57,6 +57,35 @@ aliases `ScaledDimensions` sizes so physical size has a single source of truth.
 4. Reduced Motion: motion tokens describe the default; surfaces honour
    `accessibilityReduceMotion` by suppressing or shortening motion (see E3-PR3/PR6).
 
+## Content Presentation System (E3-PR6)
+
+`ContentPresentationPolicy.swift` is the pure, tested decision layer for content
+presentation. It holds no playback logic (inputs are resolved presentation
+values), so it never touches the Epic 4 boundary.
+
+- **Style** — `ContentPresentationStyle` (`landscape` / `poster` /
+  `posterExpandsToLandscape`), default `poster`. `resolveStyle(preferred:
+  hasLandscapeArtwork:)` degrades landscape styles to poster when landscape art
+  is missing (no empty frames). Enum-based, never raw bools.
+- **Title treatment** — `TitleTreatmentPolicy.resolve` order: Plex logo → TMDb
+  logo → TVDb logo → text title. Never blocks render.
+- **Artwork** — `ArtworkFallbackPolicy.resolve` order: landscape → backdrop crop
+  → poster-derived → placeholder. Always yields something to render.
+- **Runtime** — `RuntimeFormatter.format(minutes:)` → "2h 32m" / "47m"; nil when
+  non-positive.
+- **Content rating** — `ContentRatingPresentation.normalized` trims/validates;
+  never invents a rating.
+- **Technical badges** — `TechnicalBadgePolicy`: one badge per dimension in
+  order resolution → video → audio (e.g. "4K • Dolby Vision • Atmos");
+  `highestPriority(from:order:)` picks the highest-value candidate per dimension
+  to avoid spam.
+- **Metadata hierarchy** — `MetadataHierarchyPolicy.build` assembles the
+  canonical hierarchy: title treatment → Rating · Year · Runtime → badges →
+  description, nil-filtered and deterministic.
+
+All of the above are covered by `ContentPresentationPolicyTests`. Card views
+(E3-PR7) consume these; nothing renders presentation logic inline.
+
 ## Adoption status
 
 - E3-PR2: `GlassRowStyle` (all button styles + glass background + row modifier)

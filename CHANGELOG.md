@@ -15,6 +15,7 @@
 
 ### Internal (no user-facing change)
 
+- Epic 3 PR6: added the Content Presentation System policy layer — a centralized, tested `ContentPresentationStyle` model plus pure policies for title/artwork fallback, runtime, content rating, technical-badge selection (resolution → video → audio), and the canonical metadata hierarchy. Foundation for the content card modes; no visual change yet.
 - Epic 3 PR5: Discover now shows a calm loading and empty state instead of a blank page when no recommendations have loaded yet. Watchlist feedback is unchanged.
 - Epic 3 PR4: detail-page hero metadata now renders in a deterministic, tested order (type → genres → year · duration) via `DetailMetadataCascade`. Behavior-identical; ordering is no longer scattered inline. No visual change.
 - Epic 3 PR2: introduced a canonical content design-token layer (`ContentDesignTokens`) over `ScaledDimensions` and refactored `GlassRowStyle` to consume it. Behavior-identical (token values equal the prior literals, pinned by tests); establishes one source of truth for content focus opacities, scales, motion, depth, and the metadata type ramp. No visual change.
