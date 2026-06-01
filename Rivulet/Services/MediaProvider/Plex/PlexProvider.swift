@@ -19,7 +19,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     let authToken: String
     let networkManager: PlexNetworkManager
     let dataStore: PlexDataStore
-    let watchlistAPI: PlexWatchlistAPI
+    let watchlistService: any PlexWatchlistManaging
 
     init(
         machineIdentifier: String,
@@ -28,7 +28,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         authToken: String,
         networkManager: PlexNetworkManager = .shared,
         dataStore: PlexDataStore = .shared,
-        watchlistAPI: PlexWatchlistAPI = PlexWatchlistAPI()
+        watchlistService: any PlexWatchlistManaging
     ) {
         self.id = "plex:\(machineIdentifier)"
         self.displayName = displayName
@@ -36,7 +36,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         self.authToken = authToken
         self.networkManager = networkManager
         self.dataStore = dataStore
-        self.watchlistAPI = watchlistAPI
+        self.watchlistService = watchlistService
     }
 
     // MARK: - Browse
@@ -296,36 +296,27 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     var supportsWatchlist: Bool { true }
 
     func isOnWatchlist(_ ref: MediaItemRef) async -> Bool {
-        // The shared PlexWatchlistService maintains an observable cache of
-        // watchlist GUIDs. For TMDB-rooted refs (e.g. from Discover) we can
-        // answer directly. For Plex-rooted refs (library items) we'd need to
-        // resolve the item's tmdb GUID first — left for Phase 3 watchlist
-        // wiring once it has the MediaItem in hand.
+        // PlexWatchlistService owns the account-token Discover/provider cache.
+        // Plex-rooted refs still require GUID resolution before this boundary
+        // can answer safely.
         await MainActor.run {
             if ref.providerID == TMDBMediaMapper.providerID,
                let (tmdbId, _) = TMDBMediaMapper.decodeItemID(ref.itemID) {
-                return PlexWatchlistService.shared.contains(tmdbId: tmdbId)
+                return watchlistService.contains(tmdbId: tmdbId)
             }
             return false
         }
     }
 
     func addToWatchlist(_ ref: MediaItemRef) async throws {
-        // TODO(phase-3-watchlist): resolve the item's tmdb:// guid (via
-        // LibraryGUIDIndex for Plex refs, direct from ref for TMDB refs) and
-        // call PlexWatchlistService.shared.add(guid:item:). Phase 3's
-        // detail-view watchlist toggle and Discover-row context menu have
-        // the MediaItem (with title/year/posterURL) needed to build the
-        // PlexWatchlistItem stub.
         throw MediaProviderError.backendSpecific(
-            underlying: "Use PlexWatchlistService.shared.add for now; provider passthrough wired in Phase 3"
+            underlying: PlexProviderBoundaryPolicy.refOnlyWatchlistWriteUnsupportedMessage
         )
     }
 
     func removeFromWatchlist(_ ref: MediaItemRef) async throws {
-        // TODO(phase-3-watchlist): mirror addToWatchlist's plumbing.
         throw MediaProviderError.backendSpecific(
-            underlying: "Use PlexWatchlistService.shared.remove for now; provider passthrough wired in Phase 3"
+            underlying: PlexProviderBoundaryPolicy.refOnlyWatchlistWriteUnsupportedMessage
         )
     }
 
