@@ -844,3 +844,13 @@ submissions, and the closure report. No production code change.
 | E2-PR8-CLOSURE-001 | Epic Closure | 2026-06-01 | Epic 2 owner | Epic 2 closure report: exit-gate status, slices, files, parity, a11y, perf, security, debt, UAT/device-validation required, recommendation (close with accepted debt) | `Docs/modernization/epic-2/epic-2-closure-report.md` | Gate Satisfying | Pending | Mirrors Epic 1 closure structure |
 | E2-PR8-VALIDATION-001 | Testing/Build | 2026-06-01 | Epic 2 owner | Full suite: 461 tests passed, 0 failed; tvOS build exit 0; 9 Epic 2 pure-policy suites enumerated | `xcodebuild … test` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | No regression across Epic 1/playback/parser suites |
 | E2-PR8-PARITY-001 | Parity | 2026-06-01 | Epic 2 owner | Proposed score changes Home/Hero/Navigation/Focus/Top Shelf all → 4 with evidence IDs; capped at 4 pending device/numeric (Rule 2); awaiting Project Owner (Rule 4) | `Docs/modernization/epic-0/parity-scorecard.md` | Reviewed | Pending | Not self-accepted |
+
+## Epic 3 PR 1 Evidence Entries (Decomposition + Baseline)
+
+E3-PR1 establishes the Epic 3 plan and content-surface baseline audit. No app
+behavior change.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E3-PR1-DECOMP-001 | Planning | 2026-06-01 | Epic 3 owner | Epic 3 decomposition: objective, scope, non-goals, current-state audit, workstreams, 7 PR slices, acceptance, risks, evidence/a11y/perf/security reqs, regression matrix, closure checklist | `Docs/modernization/epic-3/epic-3-decomposition.md` | Gate Satisfying | Pending | Mirrors Epic 0/1/2 doc style |
+| E3-PR1-AUDIT-001 | Content | 2026-06-01 | Epic 3 owner | Content-surface audit: `ScaledDimensions` is dimensional system but no semantic token layer; `GlassRowStyle` duplicates color/scale/spring literals; `MediaDetailView`/`DiscoverView` lack `ContentStateView`; preview transition/focus untested | `Docs/modernization/epic-3/epic-3-decomposition.md` §4 | Reviewed | Pending | Grounds slices E3-PR2..6 |
