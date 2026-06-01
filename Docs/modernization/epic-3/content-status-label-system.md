@@ -183,6 +183,21 @@ in `DEBT-E3-ADO03-001`.
 episode air dates is deferred — not faked). "Another Season Is Coming" (renewed
 without a date) is a candidate future case.
 
+### ADO-04 follow-up (2026-06-01) — detail page + Plex guids
+
+Live testing showed no label on the **TV show detail page** — because ADO-04 had
+wired only the hero, and because home-hub items shipped without external IDs
+(`includeGuids` defaulted off) so even the hero's `tmdbId` was nil and the lookup
+never ran. Both fixed:
+- **Detail page adopted:** `MediaItemDetail` now carries `tmdbId` (from Plex
+  `guid`/`Guid` or a native TMDb ref); `MediaDetailView` resolves the status from
+  `fetchStatusDetail` once `detail` loads and renders the chip above the title
+  (gated by `ContentStatusPlacement.allows(_, on: .detail)`). Hidden on missing/
+  stale data.
+- **`includeGuids=1` everywhere:** `getMetadata`, `getFullMetadata`, `getChildren`,
+  `getRecentlyAdded`, `getHubs`, `getLibraryHubs`, and the library-items default
+  now request external IDs, so hero/list/detail items reliably resolve a `tmdbId`.
+
 ### Recommended further adoption
 1. Hero — premieres/returns/newSeason/comingSoon/allEpisodesAvailable (the
    high-value editorial line).

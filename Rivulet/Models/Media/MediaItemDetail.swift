@@ -27,4 +27,10 @@ struct MediaItemDetail: Sendable {
     // Wave 1 additions for the detail view
     let nextEpisode: MediaItem?      // shows only — Plex `OnDeck`, Jellyfin `/Shows/NextUp`
     let collections: [String]        // collection names this item is tagged with
+
+    /// External TMDb id for this title, when known (from Plex `guid`/`Guid` or a
+    /// native TMDb ref). Drives the content-status label lookup (ADO-04); nil
+    /// when no external id is exposed. Defaulted so existing constructions are
+    /// non-breaking.
+    var tmdbId: Int? = nil
 }

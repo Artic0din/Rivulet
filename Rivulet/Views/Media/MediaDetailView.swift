@@ -81,6 +81,9 @@ struct MediaDetailView: View {
     // Detail state (replaces fullMetadata)
     @State private var detail: MediaItemDetail?
     @State private var collectionItems: [MediaItem] = []
+    /// ADO-04: editorial content-status label for the detail header, resolved
+    /// from the item's TMDb status once `detail` (and its tmdbId) loads.
+    @State private var contentStatusLabel: ContentStatusLabel?
     @State private var collectionName: String?
     @State private var recommendedItems: [MediaItem] = []
     @State private var isWatched = false
@@ -720,6 +723,19 @@ struct MediaDetailView: View {
                 // Text content — fixed height so buttons/peek distance
                 // stays constant regardless of description length, logo vs title, etc.
                 VStack(alignment: .leading, spacing: 14) {
+                    // ADO-04: editorial content-status label above the title
+                    // (Status → Title → Metadata → Synopsis). Shown only when the
+                    // tested policy returns a detail-eligible, data-backed label.
+                    if let contentStatusLabel {
+                        Text(contentStatusLabel.displayText.uppercased())
+                            .font(.system(size: 15, weight: .bold))
+                            .tracking(0.5)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(Capsule(style: .continuous).fill(Color.white.opacity(0.16)))
+                            .accessibilityLabel(contentStatusLabel.displayText)
+                    }
                     // Plex clearLogo or title — fixed height so content below is always
                     // at the same position regardless of logo aspect ratio
                     Group {
@@ -2296,6 +2312,29 @@ struct MediaDetailView: View {
 
         isLoadingExtras = false
         _ = ratingKey
+
+        await resolveContentStatus()
+    }
+
+    /// ADO-04: resolves the detail header's content-status label from the item's
+    /// TMDb status (reusing the cached `tmdb/details/{id}` payload). Sets nil when
+    /// there is no tmdbId, the item is not a movie/show, or no detail-eligible,
+    /// still-upcoming/qualifying label applies.
+    private func resolveContentStatus() async {
+        contentStatusLabel = nil
+        guard let tmdbId = detail?.tmdbId else { return }
+        let kind: ContentStatusKind
+        let type: TMDBMediaType
+        switch currentItem.kind {
+        case .movie: kind = .movie; type = .movie
+        case .show:  kind = .show;  type = .tv
+        default: return // status labels are show/movie-level on detail
+        }
+        guard let status = await TMDBDiscoverService.shared.fetchStatusDetail(tmdbId: tmdbId, type: type) else { return }
+        let input = TMDBContentStatus.input(from: status, kind: kind)
+        guard let label = ContentStatusPolicy.classify(input, reference: Date()),
+              ContentStatusPlacement.allows(label, on: .detail) else { return }
+        contentStatusLabel = label
     }
 
     private func syncHeroBackdrop() {

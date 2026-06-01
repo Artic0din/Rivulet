@@ -385,7 +385,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         size: Int = 100,
         sort: String? = nil,
         type: Int? = nil,
-        includeGuids: Bool = false
+        includeGuids: Bool = true
     ) async throws -> (items: [PlexMetadata], totalSize: Int?) {
         guard var components = URLComponents(string: "\(serverURL)/library/sections/\(sectionId)/all") else {
             throw PlexAPIError.invalidURL
@@ -436,7 +436,13 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         authToken: String,
         ratingKey: String
     ) async throws -> PlexMetadata {
-        guard let url = URL(string: "\(serverURL)/library/metadata/\(ratingKey)") else {
+        guard var components = URLComponents(string: "\(serverURL)/library/metadata/\(ratingKey)") else {
+            throw PlexAPIError.invalidURL
+        }
+        // Always request external IDs (tmdb://…) so callers can resolve TMDb
+        // status, watchlist guids, etc.
+        components.queryItems = [URLQueryItem(name: "includeGuids", value: "1")]
+        guard let url = components.url else {
             throw PlexAPIError.invalidURL
         }
 
@@ -468,7 +474,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "includeChapters", value: "1"),
             URLQueryItem(name: "includeRelated", value: "0"),
             URLQueryItem(name: "includeMarkers", value: "1"),
-            URLQueryItem(name: "includeCollections", value: "1")
+            URLQueryItem(name: "includeCollections", value: "1"),
+            URLQueryItem(name: "includeGuids", value: "1")
         ]
 
         guard let url = components.url else {
@@ -589,9 +596,10 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             throw PlexAPIError.invalidURL
         }
 
-        // Include markers for skip intro/credits functionality
+        // Include markers for skip intro/credits functionality + external IDs.
         components.queryItems = [
-            URLQueryItem(name: "includeMarkers", value: "1")
+            URLQueryItem(name: "includeMarkers", value: "1"),
+            URLQueryItem(name: "includeGuids", value: "1")
         ]
 
         guard let url = components.url else {
@@ -758,7 +766,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         }
 
         components.queryItems = [
-            URLQueryItem(name: "X-Plex-Container-Size", value: "\(limit)")
+            URLQueryItem(name: "X-Plex-Container-Size", value: "\(limit)"),
+            URLQueryItem(name: "includeGuids", value: "1")
         ]
 
         guard let url = components.url else {
@@ -783,7 +792,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         }
 
         components.queryItems = [
-            URLQueryItem(name: "count", value: "\(count)")
+            URLQueryItem(name: "count", value: "\(count)"),
+            URLQueryItem(name: "includeGuids", value: "1")
         ]
 
         guard let url = components.url else {
@@ -807,7 +817,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         }
 
         components.queryItems = [
-            URLQueryItem(name: "count", value: "\(count)")
+            URLQueryItem(name: "count", value: "\(count)"),
+            URLQueryItem(name: "includeGuids", value: "1")
         ]
 
         guard let url = components.url else {
