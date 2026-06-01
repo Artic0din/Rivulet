@@ -1331,16 +1331,16 @@ struct InfiniteContentRow: View {
             let savedFocusId = focusedItemId
             items = initialItems
             hasReachedEnd = false
-            // Restore focus after items reset to prevent focus loss (e.g., after marking watched)
-            if let savedFocusId {
-                let parts = savedFocusId.split(separator: ":", maxSplits: 1)
-                let savedKey = parts.count == 2 ? String(parts[1]) : nil
-                if let savedKey, items.contains(where: { $0.ratingKey == savedKey }) {
-                    // Must nil first then restore async — SwiftUI ignores setting the same value
-                    focusedItemId = nil
-                    DispatchQueue.main.async {
-                        focusedItemId = savedFocusId
-                    }
+            // Restore focus after items reset to prevent focus loss (e.g., after
+            // marking watched), but only when the previously-focused item still
+            // exists — never strand focus on a vanished item (E2-PR3). Compares
+            // full focus identities so rowIDs containing ":" are handled safely.
+            let validFocusIDs = Set(items.map { focusId(for: $0) })
+            if let restore = FocusRestorationPolicy.restoredFocusID(saved: savedFocusId, validFocusIDs: validFocusIDs) {
+                // Must nil first then restore async — SwiftUI ignores setting the same value
+                focusedItemId = nil
+                DispatchQueue.main.async {
+                    focusedItemId = restore
                 }
             }
         }

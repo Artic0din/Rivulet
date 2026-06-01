@@ -99,3 +99,9 @@ This matrix is acceptable when:
 2. Every flow states the required validation modes.
 3. Evidence requirements are explicit and reusable.
 4. Reviewers can use the matrix to reject incomplete accessibility validation.
+
+## Captured Validation Notes
+
+| Flow ID | Date | PR | Level | Notes |
+| --- | --- | --- | --- | --- |
+| A11Y-002 | 2026-06-01 | E2-PR3 | Code/policy audit (device pending) | Sidebar/content focus ownership documented; Home row focus restoration made deterministic and stale-safe (no focus stranded on vanished items after refresh); reduced-motion and VoiceOver order unchanged. Pure-policy test coverage via `E2-PR3-TEST-001`. On-device VoiceOver/focus validation still required before Epic 5 (`DEBT-E0-007`). Evidence: `E2-PR3-AUDIT-001`, `E2-PR3-A11Y-001`. |
