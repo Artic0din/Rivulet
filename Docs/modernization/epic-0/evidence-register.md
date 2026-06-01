@@ -955,3 +955,14 @@ and corrects two overstated test counts in earlier evidence.
 | E3-PR8-A11Y-001 | Accessibility | 2026-06-01 | Epic 3 owner | Content accessibility review: A11Y-005/006/007 (preview reduce-motion + exit/focus), A11Y-008/009 (detail cascade order), A11Y-010 (discover empty/loading) — all code/policy reviewed; device capture deferred | `Docs/modernization/epic-3/E3-PR8-content-accessibility-review.md`, `Docs/modernization/epic-0/accessibility-validation-matrix.md` | Gate Satisfying | Pending | Consolidates PR3–PR7 a11y |
 | E3-PR8-FOCUS-001 | Focus | 2026-06-01 | Epic 3 owner | Content focus covered by `FocusRestorationPolicyTests` (10), `FocusMemoryTests` (6), `PreviewStateMachineTests` (9), `ContentCardAccessibilityTests` (4) | full suite | Reviewed | Pending | No content focus dead-ends in tested logic |
 | E3-PR8-CORRECTION-001 | Testing/Integrity | 2026-06-01 | Epic 3 owner | Corrected counts: `ContentDesignTokensTests` 6→5, `ContentPresentationPolicyTests` 17→15 (verified against full-suite run); no test removed, all pass | `/tmp/e3_fulltest.log` (511 passed, 0 failed) | Reviewed | Pending | Accuracy fix; commit-message history left as-is |
+
+## Epic 3 PR 9 Evidence Entries (Closure)
+
+E3-PR9 assembles Epic 3 closure: full-suite validation, parity submissions, and
+the closure report. No production code change.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E3-PR9-CLOSURE-001 | Epic Closure | 2026-06-01 | Epic 3 owner | Epic 3 closure report: expanded-acceptance status, slices, files, parity, a11y, perf, security, debt, UAT/device-validation required, recommendation (close with accepted debt) | `Docs/modernization/epic-3/epic-3-closure-report.md` | Gate Satisfying | Pending | Mirrors Epic 1/2 closure structure |
+| E3-PR9-VALIDATION-001 | Testing/Build | 2026-06-01 | Epic 3 owner | Full suite: 511 passed, 0 failed; tvOS build exit 0; 7 Epic 3 pure-policy/label suites enumerated with corrected counts | `xcodebuild … test` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | +50 tests over Epic 2 close (461) |
+| E3-PR9-PARITY-001 | Parity | 2026-06-01 | Epic 3 owner | Proposed: Visual Language 3→4, Detail 3→4, Preview 4 (strengthened), Accessibility 2→3; capped pending device/numeric (Rule 2); awaiting Project Owner (Rule 4) | `Docs/modernization/epic-0/parity-scorecard.md` | Reviewed | Pending | Not self-accepted |

@@ -15,6 +15,7 @@
 
 ### Internal (no user-facing change)
 
+- Epic 3 closed (with accepted debt): canonical content design tokens, a tested Content Presentation System (style/title/artwork/runtime/rating/badges/metadata hierarchy), reduce-motion-safe preview transitions, a deterministic detail metadata cascade, calm Discover states, and landscape/poster→landscape content cards. Full suite green (511 passed). On-device accessibility/performance capture and broad card adoption remain as tracked debt. See `Docs/modernization/epic-3/epic-3-closure-report.md`.
 - Epic 3 PR7: added landscape and poster→landscape-on-focus content card components (`LandscapeContentCard`) driven by the presentation policies — lower-left logo/title overlay, info line, technical badges, graceful artwork/logo fallback, Reduce Motion support, and a combined VoiceOver label. Additive for now; production row adoption is tracked as debt.
 - Epic 3 PR6: added the Content Presentation System policy layer — a centralized, tested `ContentPresentationStyle` model plus pure policies for title/artwork fallback, runtime, content rating, technical-badge selection (resolution → video → audio), and the canonical metadata hierarchy. Foundation for the content card modes; no visual change yet.
 - Epic 3 PR5: Discover now shows a calm loading and empty state instead of a blank page when no recommendations have loaded yet. Watchlist feedback is unchanged.
