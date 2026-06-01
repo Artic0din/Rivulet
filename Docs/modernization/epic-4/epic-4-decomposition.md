@@ -113,3 +113,31 @@ physical Apple TV are available for the mandatory device gate; (c) E4-PR1
 (stream-URL redaction) is scheduled first. Epic 4 can then begin with E4-PR1.
 
 No Epic 4 code has been written. This document is planning only.
+
+---
+
+## 9. Addendum — Apple AVKit reference audit (2026-06-02)
+
+See `apple-avkit-playback-reference-audit.md`. Public-API/HIG mapping confirmed
+several roadmap items are **already implemented natively**, and surfaced one
+net-new slice:
+
+- **Already native (no new slice; device-verify only):** external metadata via
+  `AVPlayerItem.externalMetadata` (title/subtitle/desc/genre/rating/year/artwork,
+  token-safe); native chapters via `AVPlayerItem.navigationMarkerGroups`
+  (`includeChapters=1`); native transport / Siri Remote / Now Playing / PiP on the
+  `AVPlayerViewController` path; contextual Skip via `contextualActions`.
+- **New slice — E4-PR9 (Post-play UX standardization):** standardize + verify the
+  existing custom post-play overlay (`Views/Player/PostVideo/`) against Apple's
+  content-proposal *model* — cross-player (RPlayer + AVKit), artwork/title/Play-
+  Next/Back, **no surprise autoplay** (countdown cancellable/setting-gated),
+  related-for-movies via Plex `includeRelated`, watch-state updated before the
+  proposal (Epic 1 consume-only). **Do NOT** migrate to `AVContentProposal`
+  (AVKit-path only → cross-player fragmentation). No corpus/device dependency for
+  the logic; on-device UX verification before close. Tracked `DEBT-E4-AVKIT-001`.
+- **Backlog (optional, minor):** AVKit metadata enrichment (precise release date,
+  dedicated season/episode identifiers); Plex `includeRelated` adoption for
+  post-play related rows. Tracked `DEBT-E4-AVKIT-001`.
+
+Recommended order unchanged: E4-PR5 (recovery) next; E4-PR9 (post-play) after
+E4-PR5 / alongside E4-PR7; E4-PR6 flip remains corpus/device-gated.

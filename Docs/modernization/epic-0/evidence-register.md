@@ -1290,3 +1290,15 @@ behaviour change, Epic 1 watch-state boundary untouched.
 | E4-PR4-PRESERVE-001 | Behaviour | 2026-06-02 | Epic 4 owner | Policy standalone (not wired into `MediaDetailView`/UPVM); no default route / UX / resume-prompt change. Near-end + over-duration mirror existing (no resolution-time clamp; player clamps) | code review | Reviewed | Pending | Pure-extraction slice |
 | E4-PR4-TEST-001 | Testing | 2026-06-02 | Epic 4 owner | `PlaybackResumePolicyTests` (14): zero→beginning, valid→resume, restart→beginning, prompt on/off, near-end not-in-progress (no prompt, resumes raw), 0.98 boundary, offset>duration raw, live/trailer ignore, single seek source, deterministic, launch-offset mirror. Ran with PlaybackRouting/Telemetry/Observability/PlexProviderBoundary | `xcodebuild … test` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure policy under test |
 | E4-PR4-BUILD-001 | Build | 2026-06-02 | Epic 4 owner | tvOS simulator build exit 0; `git diff --check` clean | `xcodebuild build` → ** BUILD SUCCEEDED ** | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+
+## Apple AVKit Playback Reference Audit (2026-06-02)
+
+Audit/docs only — no code change. Public APIs/HIG; 4 Apple AVKit pages verified
+via the structured docs reader.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E4-AVKIT-AUDIT-001 | Architecture/Audit | 2026-06-02 | Epic 4 owner | Mapped public AVKit playback APIs (content proposals, customizing tvOS playback, navigation markers, delegate) to Rivulet. Confirms AVKit-first strategy + native posture | `Docs/modernization/epic-4/apple-avkit-playback-reference-audit.md` | Reviewed | Pending | developer.apple.com SPA read via structured reader |
+| E4-AVKIT-NATIVE-001 | Verification | 2026-06-02 | Epic 4 owner | Already-native confirmed: `externalMetadata` (token-safe), `navigationMarkerGroups` (chapters + thumbnails, `includeChapters=1`), native transport/Siri/NowPlaying/PiP, contextual Skip. Custom UI only for RPlayer + cross-player post-play overlay | `UniversalPlayerViewModel.swift`, `NativePlayerViewController.swift` | Reviewed | Pending | No rewrite needed |
+| E4-AVKIT-METASAFE-001 | Security | 2026-06-02 | Epic 4 owner | `buildExternalMetadata` places only plain strings + in-memory JPEG artwork into `AVMetadataItem`; no token/URL/stream/path. Consistent with E4-PR1 | `UniversalPlayerViewModel.buildExternalMetadata` | Reviewed | Pending | Metadata sink verified clean |
+| E4-AVKIT-POSTPLAY-001 | Governance | 2026-06-02 | Epic 4 owner | Post-play is a custom cross-player overlay (not `AVContentProposal`, by design). New slice **E4-PR9** recommended to standardize/verify (no-surprise-autoplay, related-for-movies, watch-state-before). Tracked `DEBT-E4-AVKIT-001` | audit §4/§9 | Reviewed | Pending | No `AVContentProposal` migration (cross-player) |
