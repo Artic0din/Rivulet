@@ -455,4 +455,27 @@ Epic 4 (playback excellence) should begin only after Epic 3 closes and only with
 
 ---
 
+## Post-audit adoption status (2026-06-01)
+
+The two visual-system gaps this audit flagged (§9 adaptive tint, §6 rating-badge
+styling) have since shipped as **ADO-06**:
+
+- **Adaptive tint (was §9 Gap → Live):** `AdaptiveTintLayer` washes the hero and
+  detail backdrop with a subtle colour sampled from the on-screen artwork —
+  off-main, cached per item, reusing the existing image pipeline (no new fetch).
+  Accessibility-gated: dropped under Increase Contrast, reduced under Reduce
+  Transparency, no fade under Reduce Motion. Surfaces limited to hero + detail.
+- **Rating badge (was §6/§3 Partial → Live):** content ratings render as the
+  shared rounded `MetadataBadge`, consistent with the technical-format badges
+  (which now use the same component). `RatingBadgePolicy` normalises display only
+  (strips a leading locale prefix); value/source unchanged. Landscape cards keep
+  the rating in their info line — no duplicate badge.
+
+`DEBT-E3-APPLEREF-001` is therefore substantially resolved (on-device
+visual/perf/contrast capture remains under `DEBT-E0-007`/`DEBT-E0-008`). With
+ADO-05 (episode-card labels) and ADO-06 done, Epic 3 is feature-complete and can
+close once the on-device capture is recorded; **Epic 4 remains gated**.
+
+---
+
 *This document is a benchmark audit. Rivulet is a distinct Plex/TMDb-backed tvOS app and is not an Apple TV partner application. No Apple branding, trade dress, ranking claims, private APIs, or partner-feed behaviour are adopted.*

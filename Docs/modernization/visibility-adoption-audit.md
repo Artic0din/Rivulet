@@ -167,13 +167,17 @@ Ryan on device:
 - **ADO-03** — Content Status Label System (architecture + placement + tests).
 - **ADO-04** — TMDb-backed status labels live on Home hero + detail page;
   `includeGuids=1` everywhere; hero auto-rotates.
-- **ADO-05 (this slice)** — episode-card status labels live (Season Finale / New
-  Episode Today / New Episode), Plex-backed, placement-gated, guarded, tested.
+- **ADO-05** — episode-card status labels live (Season Finale / New Episode
+  Today / New Episode), Plex-backed, placement-gated, guarded, tested.
+- **ADO-06 (final Epic 3 visual-polish slice)** — adaptive artwork-driven backdrop
+  tint on hero + detail (off-main, cached, accessibility-gated) and rating shown
+  as a first-class `MetadataBadge` consistent with the technical badges. Substantially
+  resolves `DEBT-E3-APPLEREF-001`.
 
 So the content-presentation visibility gap that triggered this audit is now
-substantially closed in production. Remaining: the Apple-TV-reference visual
-polish (adaptive tint, rounded rating badge → ADO-06 / `DEBT-E3-APPLEREF-001`),
-broader card-row migration + technical-badge spread (`DEBT-E3-PR7-001`), the
-renewed-no-date hero/detail case (`DEBT-E3-ADO03-001`), and on-device a11y +
-performance capture (`DEBT-E0-007`). **Epic 4 remains gated** until Epic 3 closes
-and the playback preconditions clear.
+closed in production and Epic 3 is feature-complete. Remaining: broader card-row
+migration + technical-badge spread (`DEBT-E3-PR7-001`), the renewed-no-date
+hero/detail case (`DEBT-E3-ADO03-001`), and on-device a11y + performance capture
+(`DEBT-E0-007` / `DEBT-E0-008`) — the latter is the only thing standing between
+the current state and Epic 3 closure. **Epic 4 remains gated** until Epic 3
+closes and the playback preconditions clear.

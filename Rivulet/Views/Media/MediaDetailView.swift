@@ -685,18 +685,28 @@ struct MediaDetailView: View {
 
     /// Fixed backdrop image (behind everything, doesn't scroll)
     private var heroBackdropImage: some View {
-        HeroBackdropImage(
-            url: heroBackdrop.session.displayedBackdropURL,
-            animationDuration: isPreviewCarousel ? 0.38 : 0.26
-        ) {
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.blue.opacity(0.3), Color.black],
-                        startPoint: .top,
-                        endPoint: .bottom
+        ZStack {
+            HeroBackdropImage(
+                url: heroBackdrop.session.displayedBackdropURL,
+                animationDuration: isPreviewCarousel ? 0.38 : 0.26
+            ) {
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.blue.opacity(0.3), Color.black],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     )
-                )
+            }
+
+            // ADO-06: subtle artwork-driven tint, above the art and beneath the
+            // existing legibility scrims. Reuses the cached backdrop image (no new
+            // fetch); disabled under Increase Contrast.
+            AdaptiveTintLayer(
+                itemKey: currentItem.ref.itemID,
+                artworkURL: heroBackdrop.session.displayedBackdropURL
+            )
         }
     }
 
@@ -962,15 +972,10 @@ struct MediaDetailView: View {
                 Text(part)
             }
 
-            // Content rating badge (bordered, at end)
-            if let contentRating = detail?.contentRating {
-                Text(contentRating)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .stroke(Color.white.opacity(0.5), lineWidth: 1)
-                    }
+            // ADO-06: content rating as a first-class metadata badge (same style
+            // as the technical badges), display-normalised via RatingBadgePolicy.
+            if let rating = RatingBadgePolicy.displayRating(detail?.contentRating) {
+                MetadataBadge(text: rating)
             }
         }
         .font(.caption)
@@ -1007,34 +1012,15 @@ struct MediaDetailView: View {
                 }
             }
 
-            // Quality badges from MediaSource
+            // Quality badges from MediaSource — ADO-06: rendered with the shared
+            // MetadataBadge so technical badges and the rating badge match.
             let badges = detail?.mediaSources.first?.qualityBadges() ?? []
             ForEach(badges, id: \.self) { badge in
-                QualityBadge(text: badge)
+                MetadataBadge(text: badge)
             }
         }
         .font(.caption.bold())
         .foregroundStyle(.white)
-    }
-
-    /// Small badge for quality indicators (4K, DV, Atmos, etc.)
-    private struct QualityBadge: View {
-        let text: String
-        var body: some View {
-            Text(text)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(.white.opacity(0.15))
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .stroke(.white.opacity(0.3), lineWidth: 0.5)
-                }
-        }
     }
 
     /// Icon for fallback poster based on item kind

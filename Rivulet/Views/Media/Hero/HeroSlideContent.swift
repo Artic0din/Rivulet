@@ -128,16 +128,10 @@ struct HeroSlideContent: View {
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(.white.opacity(0.9))
             }
-            if let rating = item.contentRating, !rating.isEmpty {
-                Text(rating)
-                    .font(.system(size: 16, weight: .semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 3)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .stroke(Color.white.opacity(0.5), lineWidth: 1.5)
-                    )
-                    .foregroundStyle(.white.opacity(0.9))
+            // ADO-06: content rating as a first-class metadata badge, consistent
+            // with the detail page and technical badges.
+            if let rating = RatingBadgePolicy.displayRating(item.contentRating) {
+                MetadataBadge(text: rating, fontSize: 16)
             }
         }
     }
