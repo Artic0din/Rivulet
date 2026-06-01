@@ -1099,6 +1099,22 @@ zIndex 0 and later cells painted over the focused overflow.
 | ADO-02C-STACK-005 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` → ** BUILD SUCCEEDED ** | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
 | ADO-02C-STACK-006 | Testing/UX | 2026-06-01 | Epic 3 owner | Focused landscape card now EXPECTED to draw above neighbours. Simulator re-validation still required: Home → Recently Added → focus FUZE → confirm its landscape overflow is NOT covered by the adjacent Crime 101 poster; neighbours unmoved; no clipping | manual simulator review | **Pending (BLOCKS acceptance)** | Pending | Same acceptance gate; stacking is the re-check |
 
+## SHELF-SETTLE Evidence Entries (Recently Added = landscape shelf; poster→landscape dropped)
+
+Product decision: poster→landscape-on-focus is dropped. Recently Added is a
+landscape shelf. The poster-expansion style/geometry/overlay code was removed;
+the landscape card, mapper, token-safe artwork, accessibility, and adoption stay.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SHELF-SETTLE-001 | Content/Home | 2026-06-01 | Epic 3 owner | Recently Added row now passes `cardStyle: .landscape`; `LandscapeContentCard` renders full-bleed landscape (`art ?? poster` `.fill`) at rest AND focus with a subtle focus scale only — landscape shelf. Footprint = visible size (392×280), so no overflow, neighbour collision, or row reflow; art-less items fill with cropped poster (no gutters) | `Rivulet/Views/Media/LandscapeContentCard.swift`, `Rivulet/Views/Media/PlexHomeView.swift` | Gate Satisfying | Pending | Replaces poster→landscape behaviour |
+| SHELF-SETTLE-002 | Cleanup | 2026-06-01 | Epic 3 owner | Removed poster-expansion-only code: `ContentPresentationStyle.posterExpandsToLandscape`, `CardShape`, `ContentPresentationPolicy.shape/footprintShape/showsLandscapeComposition/resolveStyle`, the card's poster-rest layer + expansion scales, and the row-level focus `zIndex`. `ContentPresentationStyle` now `.landscape`/`.poster` only | `Rivulet/Views/Components/ContentPresentationPolicy.swift`, `Rivulet/Views/Media/LandscapeContentCard.swift`, `Rivulet/Views/Media/PlexHomeView.swift` | Reviewed | Pending | No dead poster→landscape code remains |
+| SHELF-SETTLE-003 | Content Presentation | 2026-06-01 | Epic 3 owner | Kept: `LandscapeContentCard`, `PlexContentCardMapper` (token-safe artwork), `TitleTreatmentPolicy`/`ArtworkFallbackPolicy`/`RuntimeFormatter`/`ContentRatingPresentation`/`TechnicalBadgePolicy`/`MetadataHierarchyPolicy`, combined VoiceOver label, no focus-time network fetch | `Rivulet/Views/Components/ContentPresentationPolicy.swift`, `Rivulet/Views/Media/PlexContentCardMapper.swift` | Gate Satisfying | Pending | Useful work preserved |
+| SHELF-SETTLE-004 | Accessibility | 2026-06-01 | Epic 3 owner | Card remains one `.accessibilityElement(children:.ignore)` with the combined title/info/badge label; identity independent of focus | `Rivulet/Views/Media/LandscapeContentCard.swift` | Reviewed | Pending | `ContentCardAccessibilityTests` pass |
+| SHELF-SETTLE-005 | Testing | 2026-06-01 | Epic 3 owner | `ContentPresentationPolicyTests` trimmed to the surviving policies + style cases (`{.landscape,.poster}`, default `.poster`); poster→landscape-only tests removed. `PlexContentCardMapper`/`ContentCardAccessibility`/`FocusRestoration`/`FocusMemory`/`PlexProviderBoundary` pass | `xcodebuild … test` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | No test asserts poster→landscape |
+| SHELF-SETTLE-006 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` → ** BUILD SUCCEEDED ** | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+| SHELF-SETTLE-007 | Testing/UX | 2026-06-01 | Epic 3 owner | Simulator confirmation (user): Home → Recently Added shows full-bleed landscape cards at rest; focus = subtle scale; no gutters; no neighbour collision; no reflow | manual simulator review | Pending | Pending | Acceptance is shelf behaviour, not poster→landscape |
+
 ## HERO-ROTATE Evidence Entries (home hero auto-rotation)
 
 The home hero held multiple eligible items but only advanced on manual Next.

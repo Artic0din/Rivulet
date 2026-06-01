@@ -780,7 +780,7 @@ struct PlexHomeView: View {
                                     // ADO-02: Recently Added rows use poster→landscape-on-focus
                                     // (poster at rest, landscape composition on focus); all
                                     // other rows keep the plain poster card.
-                                    cardStyle: isRecentlyAddedHub(hub) ? .posterExpandsToLandscape : .poster,
+                                    cardStyle: isRecentlyAddedHub(hub) ? .landscape : .poster,
                                     contextMenuSource: isContinueWatching ? .continueWatching : .other,
                                     onItemSelected: { item in selectItem(item) },
                                     onPlayItem: { item in
@@ -1296,15 +1296,11 @@ struct InfiniteContentRow: View {
                                     authToken: authToken
                                 )
                             } else {
-                                // ADO-02: landscape card visual; the wrapping
+                                // Landscape shelf card visual; the wrapping
                                 // Button still owns selection/preview/focus.
                                 LandscapeContentCard(
                                     model: PlexContentCardMapper.model(
                                         from: item, serverURL: serverURL, authToken: authToken
-                                    ),
-                                    style: ContentPresentationPolicy.resolveStyle(
-                                        preferred: cardStyle,
-                                        hasLandscapeArtwork: PlexContentCardMapper.hasLandscapeArtwork(item)
                                     ),
                                     isFocused: focusedItemId == focusId(for: item)
                                 )
@@ -1331,16 +1327,6 @@ struct InfiniteContentRow: View {
                                 }
                             }
                         }
-                        // ADO-02C correction: for poster→landscape rows the focused
-                        // cell's landscape composition overflows its poster
-                        // footprint. zIndex MUST be the OUTERMOST modifier so it
-                        // lands on the view the LazyHStack realizes as its direct
-                        // child — zIndex does not propagate up through wrapper
-                        // modifiers, so an inner zIndex left every sibling at 0 and
-                        // later cells painted over the focused overflow. Raising the
-                        // realized cell makes the focused overflow draw ABOVE its
-                        // neighbours. Layout is unchanged — draw order only.
-                        .zIndex(cardStyle != .poster && focusedItemId == focusId(for: item) ? 1000 : 0)
                     }
 
                     // Loading indicator at the end

@@ -1,3 +1,14 @@
+> **STATUS — SUPERSEDED (2026-06-01): poster→landscape-on-focus was DROPPED by
+> product decision.** Recently Added is settled as a **landscape shelf**
+> (full-bleed landscape at rest and on focus, subtle focus scale only). This
+> document is retained for historical rationale only; its recommended Approach A
+> (poster-rest → landscape overlay on focus) is **not** the adopted behaviour.
+> The expansion style/geometry/overlay code (`.posterExpandsToLandscape`,
+> `CardShape`/`shape`/`footprintShape`/`showsLandscapeComposition`, row-level
+> zIndex/overlay) has been removed. Poster→landscape is recorded only as a
+> future optional interaction idea, not open debt. See CHANGELOG and
+> `visibility-adoption-audit.md`.
+
 # Poster-to-Landscape Design Audit
 
 Date: 2026-06-01

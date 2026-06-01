@@ -13,86 +13,16 @@ final class ContentPresentationPolicyTests: XCTestCase {
     private let url = URL(string: "https://metadata-static.plex.tv/x.png")!
     private let url2 = URL(string: "https://image.tmdb.org/t/p/original/y.png")!
 
-    // MARK: - Style selection
+    // MARK: - Presentation style
 
-    func testPosterStyleNeverNeedsLandscape() {
-        XCTAssertEqual(ContentPresentationPolicy.resolveStyle(preferred: .poster, hasLandscapeArtwork: false), .poster)
-    }
-
-    func testLandscapeDegradesToPosterWithoutArtwork() {
-        XCTAssertEqual(ContentPresentationPolicy.resolveStyle(preferred: .landscape, hasLandscapeArtwork: false), .poster)
-        XCTAssertEqual(ContentPresentationPolicy.resolveStyle(preferred: .landscape, hasLandscapeArtwork: true), .landscape)
-    }
-
-    func testPosterExpandsDegradesToPosterWithoutArtwork() {
-        XCTAssertEqual(ContentPresentationPolicy.resolveStyle(preferred: .posterExpandsToLandscape, hasLandscapeArtwork: false), .poster)
-        XCTAssertEqual(ContentPresentationPolicy.resolveStyle(preferred: .posterExpandsToLandscape, hasLandscapeArtwork: true), .posterExpandsToLandscape)
+    func testStyleCasesAreLandscapeAndPoster() {
+        // Poster→landscape-on-focus was dropped (product decision); only the
+        // landscape shelf and poster styles remain.
+        XCTAssertEqual(Set(ContentPresentationStyle.allCases), [.landscape, .poster])
     }
 
     func testDefaultStyleIsPoster() {
         XCTAssertEqual(ContentPresentationStyle.default, .poster)
-    }
-
-    // MARK: - showsLandscapeComposition (poster→landscape-on-focus, ADO-02)
-
-    func testLandscapeStyleAlwaysShowsLandscape() {
-        XCTAssertTrue(ContentPresentationPolicy.showsLandscapeComposition(style: .landscape, isFocused: false))
-        XCTAssertTrue(ContentPresentationPolicy.showsLandscapeComposition(style: .landscape, isFocused: true))
-    }
-
-    func testPosterStyleNeverShowsLandscape() {
-        XCTAssertFalse(ContentPresentationPolicy.showsLandscapeComposition(style: .poster, isFocused: false))
-        XCTAssertFalse(ContentPresentationPolicy.showsLandscapeComposition(style: .poster, isFocused: true))
-    }
-
-    func testPosterExpandsShowsLandscapeOnlyWhenFocused() {
-        // Resolved style BEFORE focus → poster-shaped resting (no landscape).
-        XCTAssertFalse(ContentPresentationPolicy.showsLandscapeComposition(style: .posterExpandsToLandscape, isFocused: false))
-        // Resolved style AFTER focus → landscape composition.
-        XCTAssertTrue(ContentPresentationPolicy.showsLandscapeComposition(style: .posterExpandsToLandscape, isFocused: true))
-    }
-
-    // MARK: - Card shape / footprint geometry (ADO-02C)
-
-    func testShapePosterAlwaysPoster() {
-        XCTAssertEqual(ContentPresentationPolicy.shape(style: .poster, isFocused: false), .poster)
-        XCTAssertEqual(ContentPresentationPolicy.shape(style: .poster, isFocused: true), .poster)
-    }
-
-    func testShapeLandscapeAlwaysLandscape() {
-        XCTAssertEqual(ContentPresentationPolicy.shape(style: .landscape, isFocused: false), .landscape)
-        XCTAssertEqual(ContentPresentationPolicy.shape(style: .landscape, isFocused: true), .landscape)
-    }
-
-    func testShapePosterExpandsIsPosterAtRestLandscapeOnFocus() {
-        // The geometry fix: poster-shaped footprint at rest (no gutters),
-        // landscape composition only once focused.
-        XCTAssertEqual(ContentPresentationPolicy.shape(style: .posterExpandsToLandscape, isFocused: false), .poster)
-        XCTAssertEqual(ContentPresentationPolicy.shape(style: .posterExpandsToLandscape, isFocused: true), .landscape)
-    }
-
-    func testFootprintShapeIsRestingShape() {
-        // The cell reserves the resting shape for layout in EVERY state, so the
-        // row never reflows when focus changes the visible composition.
-        XCTAssertEqual(ContentPresentationPolicy.footprintShape(style: .poster), .poster)
-        XCTAssertEqual(ContentPresentationPolicy.footprintShape(style: .landscape), .landscape)
-        // posterExpands reserves a POSTER footprint even though focus shows
-        // landscape — the landscape state is an overflow overlay, not a resize.
-        XCTAssertEqual(ContentPresentationPolicy.footprintShape(style: .posterExpandsToLandscape), .poster)
-    }
-
-    func testShowsLandscapeIsDerivedFromShape() {
-        // showsLandscapeComposition must agree with shape(...) == .landscape for
-        // every (style, focus) combination — one source of truth.
-        for style in ContentPresentationStyle.allCases {
-            for focused in [false, true] {
-                XCTAssertEqual(
-                    ContentPresentationPolicy.showsLandscapeComposition(style: style, isFocused: focused),
-                    ContentPresentationPolicy.shape(style: style, isFocused: focused) == .landscape,
-                    "mismatch for style=\(style) focused=\(focused)"
-                )
-            }
-        }
     }
 
     func testAccessibilityLabelStableAcrossFocusStates() {
