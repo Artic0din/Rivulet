@@ -2,65 +2,11 @@
 //  EpisodePresentationPolicyTests.swift
 //  RivuletTests
 //
-//  E3-PR10 — schedule labels + episode card presentation.
+//  E3-PR10 / ADO-03 — episode card presentation + content status label system.
 //
 
 import XCTest
 @testable import Rivulet
-
-final class ScheduleLabelPolicyTests: XCTestCase {
-
-    private func input(
-        aired: Int? = nil, added: Int? = nil, idx: Int? = nil, count: Int? = nil, inProgress: Bool = false
-    ) -> ScheduleLabelPolicy.Input {
-        .init(airedDaysAgo: aired, addedDaysAgo: added, episodeIndex: idx, seasonEpisodeCount: count, isInProgress: inProgress)
-    }
-
-    func testSeasonFinaleWinsOverEverything() {
-        XCTAssertEqual(ScheduleLabelPolicy.label(for: input(aired: 0, added: 0, idx: 10, count: 10, inProgress: true)), .seasonFinale)
-    }
-
-    func testNewWhenRecentlyAired() {
-        XCTAssertEqual(ScheduleLabelPolicy.label(for: input(aired: 3)), .new)
-        XCTAssertEqual(ScheduleLabelPolicy.label(for: input(aired: 14)), .new)
-    }
-
-    func testNotNewWhenOld() {
-        XCTAssertNil(ScheduleLabelPolicy.label(for: input(aired: 60)))
-    }
-
-    func testRecentlyAddedWhenAddedRecentlyButOld() {
-        XCTAssertEqual(ScheduleLabelPolicy.label(for: input(aired: 400, added: 5)), .recentlyAdded)
-    }
-
-    func testContinueWatchingLowestPriority() {
-        XCTAssertEqual(ScheduleLabelPolicy.label(for: input(inProgress: true)), .continueWatching)
-    }
-
-    func testNoLabelWhenInsufficientData() {
-        XCTAssertNil(ScheduleLabelPolicy.label(for: input()))
-    }
-
-    func testNegativeDaysIgnored() {
-        // A future air date (negative days ago) should not be "New".
-        XCTAssertNil(ScheduleLabelPolicy.label(for: input(aired: -5)))
-    }
-
-    func testDisplayText() {
-        XCTAssertEqual(ScheduleLabel.new.displayText, "New")
-        XCTAssertEqual(ScheduleLabel.seasonFinale.displayText, "Season Finale")
-        XCTAssertEqual(ScheduleLabel.recentlyAdded.displayText, "Recently Added")
-    }
-
-    func testParseAirDateAndDaysAgo() {
-        let aired = ScheduleLabelPolicy.parseAirDate("2024-01-01")
-        XCTAssertNotNil(aired)
-        let ref = ScheduleLabelPolicy.parseAirDate("2024-01-11")!
-        XCTAssertEqual(ScheduleLabelPolicy.daysAgo(from: aired, reference: ref), 10)
-        XCTAssertNil(ScheduleLabelPolicy.parseAirDate(nil))
-        XCTAssertNil(ScheduleLabelPolicy.parseAirDate(""))
-    }
-}
 
 final class EpisodeCardPresentationTests: XCTestCase {
 

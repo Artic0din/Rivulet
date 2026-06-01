@@ -1099,6 +1099,25 @@ zIndex 0 and later cells painted over the focused overflow.
 | ADO-02C-STACK-005 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` → ** BUILD SUCCEEDED ** | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
 | ADO-02C-STACK-006 | Testing/UX | 2026-06-01 | Epic 3 owner | Focused landscape card now EXPECTED to draw above neighbours. Simulator re-validation still required: Home → Recently Added → focus FUZE → confirm its landscape overflow is NOT covered by the adjacent Crime 101 poster; neighbours unmoved; no clipping | manual simulator review | **Pending (BLOCKS acceptance)** | Pending | Same acceptance gate; stacking is the re-check |
 
+## ADO-03 Evidence Entries (Content Status Label System)
+
+Replaces the narrow `ScheduleLabelPolicy` (which was BUILT BUT UNUSED) with a
+future-proof Content Status Label System. Option A: architecture + model +
+placement rules + tests; no forced live UI adoption (the valuable future-facing
+labels need TMDb fields not modelled today). See
+`Docs/modernization/epic-3/content-status-label-system.md`.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ADO-03-AUDIT-001 | Data | 2026-06-01 | Epic 3 owner | Data audit: Plex exposes only PAST signals (`originallyAvailableAt`, `addedAt`, `index`/`leafCount`); TMDb modelled today = release/first-air date + runtime/genres/cast only. Future-facing fields (`status`, `next_episode_to_air`, `in_production`, season air dates) are NOT modelled → future labels gated | `Docs/modernization/epic-3/content-status-label-system.md` | Reviewed | Pending | No new provider calls made |
+| ADO-03-MODEL-001 | Content Presentation | 2026-06-01 | Epic 3 owner | `ContentStatusLabel` (seasonFinale, episodeAvailableToday, newEpisode, allEpisodesAvailable, recentlyAdded, premieres/returns/newSeason/newEpisodeWeekly/comingSoon) + `ContentStatusInput` (current Plex inputs + optional future TMDb inputs) + `ContentStatusPolicy.classify(_:reference:)`; pure, `nonisolated`, no `Date.now()` | `Rivulet/Views/Components/ContentStatusLabel.swift` | Gate Satisfying | Pending | Future inputs nil today → labels stay off until TMDb |
+| ADO-03-PLACEMENT-001 | UI/Placement | 2026-06-01 | Epic 3 owner | `ContentStatusPlacement.allows(_:on:)`: hero/detail = editorial/show-level only; episodeCard = per-episode only; shelf = none. Hero hierarchy documented (Status → Title → Metadata → Synopsis → Actions) | `Rivulet/Views/Components/ContentStatusLabel.swift`, audit doc | Gate Satisfying | Pending | Prevents per-card chip noise |
+| ADO-03-TRUTH-001 | Correctness | 2026-06-01 | Epic 3 owner | Truthfulness: future labels fire only when their date is still ahead of the reference; negative "aired days ago" never reads new/today; missing data → nil. `seriesIsComplete` left nil (Plex cannot confirm "ended") | `Rivulet/Views/Components/ContentStatusLabel.swift` | Gate Satisfying | Pending | No invented/inferred dates |
+| ADO-03-RETIRE-001 | Cleanup | 2026-06-01 | Epic 3 owner | Retired `ScheduleLabel`/`ScheduleLabelPolicy` (the built-but-unused narrow tagger) and its tests; `EpisodeCardPresentation` (live) kept. One status system, not two | `Rivulet/Views/Media/EpisodePresentationPolicy.swift`, `RivuletTests/Unit/EpisodePresentationPolicyTests.swift` | Reviewed | Pending | No `ScheduleLabel` refs remain in code |
+| ADO-03-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `ContentStatusPolicyTests` (classification current+future, stale-date suppression, precedence, display text, date helpers, placement rules); `EpisodeCardPresentation`/`ContentPresentationPolicy`/`PlexProviderBoundary` pass | `xcodebuild … test` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | No live-UI snapshot tests invented |
+| ADO-03-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` → ** BUILD SUCCEEDED ** | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+| ADO-03-TMDB-GAP-001 | Debt | 2026-06-01 | Epic 3 owner | Future-facing labels require TMDb `status`/`in_production`/`next_episode_to_air`/`last_episode_to_air`/season air dates on the existing detail endpoints (model/decoding expansion, no new endpoint) → `DEBT-E3-ADO03-001` | audit doc, `Rivulet/Models/TMDB/TMDBDiscoverModels.swift` | Reviewed | Pending | Exact fields documented |
+
 ## SHELF-SETTLE Evidence Entries (Recently Added = landscape shelf; poster→landscape dropped)
 
 Product decision: poster→landscape-on-focus is dropped. Recently Added is a

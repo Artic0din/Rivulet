@@ -59,7 +59,7 @@ code is wired and visible.
 | **poster-to-landscape-on-focus** | **DROPPED (product decision)** | settled as landscape shelf | n/a | — | not open debt | Intentionally removed: added row stacking/spacing complexity, not required for the Epic 3 goal. The replacement is the landscape shelf above. The poster-expansion style/geometry/overlay code was removed; recorded only as a future optional interaction idea, not blocking debt |
 | ~~EpisodeContentCard~~ | **RETIRED (ADO-01B)** | `e53cf9f` → deleted `d6a274f`+ADO-01B | n/a | — | resolved | dead view + model machinery removed; production `EpisodeCard` is canonical |
 | **EpisodeCardPresentation** | **LIVE (ADO-01)** | `e53cf9f`, `d6a274f` | production `EpisodeCard` in `MediaDetailView` | show → episode detail | — | episode label + combined VoiceOver summary sourced from policy |
-| **ScheduleLabelPolicy** | BUILT BUT UNUSED | `e53cf9f` | none | — | new `DEBT-E3-PR10-001` | no hero/detail label consumer |
+| ~~ScheduleLabelPolicy~~ | **RETIRED → superseded (ADO-03)** | `e53cf9f` → removed in ADO-03 | n/a | — | resolved | Replaced by the future-proof **Content Status Label System** (`ContentStatusLabel`/`ContentStatusPolicy`/`ContentStatusPlacement`) — architecture + placement + tests live; live UI adoption deferred pending TMDb future-date fields (`DEBT-E3-ADO03-001`). No built-but-unused schedule tagger remains |
 
 **Epic 3: the headline Content Presentation System visuals (landscape cards,
 poster→landscape, episode cards, schedule labels) are BUILT BUT UNUSED.** The
