@@ -16,7 +16,9 @@ permissions:
 jobs:
   build:
     name: Build Rivulet
-    runs-on: macos-latest
+    # Pin runner image selection for determinism.
+    # This does not guarantee that the hosted image includes the required Xcode/tvOS 26 runtime.
+    runs-on: macos-15
     timeout-minutes: 45
     steps:
       - name: Checkout repository
@@ -40,11 +42,14 @@ jobs:
       - name: Build for tvOS simulator
         run: |
           set -euo pipefail
-          xcodebuild -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' build
+          xcodebuild -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV,OS=latest' build
 
   targeted-tests:
     name: Targeted Rivulet tests
-    runs-on: macos-latest
+    needs: build
+    # Keep this pinned with the build job.
+    # This job remains blocked if the hosted image lacks the required Xcode/tvOS 26 runtime.
+    runs-on: macos-15
     timeout-minutes: 45
     steps:
       - name: Checkout repository
@@ -68,7 +73,7 @@ jobs:
       - name: Run targeted platform tests
         run: |
           set -euo pipefail
-          xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' \
+          xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV,OS=latest' \
             -only-testing:RivuletTests/CredentialRegistryTests \
             -only-testing:RivuletTests/SensitiveDataRedactorTests \
             -only-testing:RivuletTests/PlexAuthManagerTests \

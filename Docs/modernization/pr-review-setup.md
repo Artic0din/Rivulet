@@ -48,6 +48,14 @@ Mac runners are expensive and slower than Linux runners. The setup separates che
 
 - Governance, CSV, privacy manifest parsing, and secret scanning run on Ubuntu.
 - tvOS build/test runs on macOS only.
+- The tvOS workflow pins `macos-15` to stabilize hosted-runner image selection.
+- The `macos-15` pin does not guarantee the hosted image contains the Xcode/tvOS 26 runtime required by Rivulet.
+- If GitHub-hosted runners do not provide the required Xcode/tvOS 26 stack, tvOS build/test must remain visibly blocked or failing rather than falsely green.
+- Update the pinned runner when GitHub provides a hosted runner with the required Rivulet Xcode/tvOS stack.
+- The targeted test job depends on the build job to avoid spending macOS runner time when compilation already fails.
+- This sequencing does not eliminate all compile work from `xcodebuild test`; deeper build/test optimization requires separate validation.
+- tvOS simulator destinations include `OS=latest` to reduce destination ambiguity when a compatible runtime exists.
+- `OS=latest` does not fix a missing simulator runtime.
 - Workflows use `pull_request` and `push` to `main`; they do not run macOS jobs on feature-branch pushes.
 - Workflows use concurrency cancellation to avoid paying for superseded runs.
 - The tvOS workflow generates a placeholder `Rivulet/Config/Secrets.swift` from `Rivulet/Config/Secrets.swift.template` during CI. No DSN or secret is committed.
