@@ -1003,3 +1003,19 @@ Direction #2 (episode cards, cast images, schedule labels). No code change.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | E3-PR12-CLOSURE-001 | Epic Closure | 2026-06-01 | Epic 3 owner | Revised Epic 3 closure report: §20.7 + §21.4 acceptance met (episode cards/cast images/schedule labels added), slices through E3-PR11, full-suite 533/0, recommendation close-with-debt | `Docs/modernization/epic-3/epic-3-closure-report.md` | Gate Satisfying | Pending | Supersedes E3-PR9-CLOSURE-001 |
 | E3-PR12-VALIDATION-001 | Testing/Build | 2026-06-01 | Epic 3 owner | Full suite: 533 passed, 0 failed; tvOS build exit 0; 10 Epic 3 pure-policy/label suites | `xcodebuild … test` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | +72 over Epic 2 close (461) |
+
+## ADO-01 Evidence Entries (EpisodeContentCard / EpisodeCardPresentation adoption)
+
+ADO-01 makes the `EpisodeCardPresentation` policy LIVE in the production
+`EpisodeCard`. Honest correction: the standalone `EpisodeContentCard` view is
+superseded by the richer production card and is NOT shipped (would regress).
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ADO-01-AUDIT-001 | Detail | 2026-06-01 | Epic 3 owner | Production `EpisodeCard` already Apple-TV-style (still + EPISODE label + title + synopsis + duration + watched/progress + two-button play/info + context menu); richer than `EpisodeContentCard` | `Docs/modernization/epic-3/ADO-01-episode-card-adoption.md` | Reviewed | Pending | Swapping weaker view would regress |
+| ADO-01-ADOPT-001 | Detail | 2026-06-01 | Epic 3 owner | `EpisodeCard` now sources its episode label from `EpisodeCardPresentation.episodeLabel(index:)` and its play-control VoiceOver summary from the policy → policy is LIVE in a real detail screen | `Rivulet/Views/Media/MediaDetailView.swift`, `Rivulet/Views/Media/EpisodePresentationPolicy.swift` | Gate Satisfying | Pending | Behaviour-preserving; no view swap |
+| ADO-01-A11Y-001 | Accessibility | 2026-06-01 | Epic 3 owner | A11Y-009: episode play control reads combined summary (episode, title, runtime, state) + "Plays this episode" hint; previously fragmented overlay text | `Rivulet/Views/Media/MediaDetailView.swift` | Gate Satisfying | Pending | Device capture pending (`DEBT-E0-007`) |
+| ADO-01-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `EpisodeCardPresentationTests` (9, incl. resolved-values overload + parity with model overload); `ScheduleLabelPolicy`/`FocusRestoration`/`FocusMemory`/`PlexProviderBoundary` pass (no regression) | `xcodebuild … -only-testing:…` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Focus + provider regression checked |
+| ADO-01-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+| ADO-01-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `EpisodePresentationPolicy.swift` (a11y overload), `MediaDetailView.swift` (`EpisodeCard` label + play a11y), test + audit doc; no playback/watch-state/provider/Epic 1/detail-architecture change | working-tree diff + scope scans | Reviewed | Pending | `EpisodeContentCard` view unchanged (still unused) |
+| ADO-01-HONESTY-001 | Governance | 2026-06-01 | Epic 3 owner | `EpisodeContentCard` *view* NOT shipped (would regress richer production card); flagged for retire/converge; `DEBT-E3-PR7-001` only partially reduced — not falsely closed | `Docs/modernization/epic-3/ADO-01-episode-card-adoption.md` | Reviewed | Pending | Corrects the built-but-unused pattern honestly |

@@ -15,6 +15,7 @@
 
 ### Internal (no user-facing change)
 
+- ADO-01: the live episode cards in TV show detail now source their "EPISODE n" label and a combined VoiceOver summary (episode, title, runtime, watched/progress) from the tested episode-presentation policy, making that policy live in the real detail screen. The existing (already Apple-TV-style) episode card layout and its play/info behavior are unchanged.
 - Epic 4 planning (no implementation): added the Playback Excellence architecture report and decomposition (AVKit-first policy framing, RPlayer fallback ladder, route decision matrix, resume/recovery/telemetry plan, risk register, proposed slices, stop/go recommendation). See `Docs/modernization/epic-4/`.
 - Epic 3 PR11: cast & crew cells now read as a single VoiceOver element ("Name, Role") and fall back to readable initials when no photo is available, instead of a generic icon. Real cast/crew photos continue to load through the existing safe image pipeline.
 - Epic 3 PR10: added Apple-TV-style episode cards and contextual schedule labels (New / Recently Added / Season Finale / Continue Watching) derived deterministically from existing Plex air-date and episode data — no playback or external-provider change. Episode card component is additive pending production adoption.

@@ -104,4 +104,29 @@ final class EpisodeCardPresentationTests: XCTestCase {
         let m = EpisodeCardModel(episodeLabel: "EPISODE 2", title: "Pilot", synopsis: nil, runtime: "47m", progress: 0.5, isWatched: false)
         XCTAssertEqual(EpisodeCardPresentation.accessibilityLabel(m), "Episode 2, Pilot, 47m, 50 percent watched")
     }
+
+    // Resolved-values overload (used by the live EpisodeCard, ADO-01).
+    func testResolvedAccessibilityLabel() {
+        XCTAssertEqual(
+            EpisodeCardPresentation.accessibilityLabel(episodeLabel: "EPISODE 13", title: "Be Still My Heart", runtime: "40m", isWatched: false, progress: nil),
+            "Episode 13, Be Still My Heart, 40m"
+        )
+    }
+
+    func testResolvedAccessibilityLabelWithSeasonPrefixAndWatched() {
+        // `.capitalized` segments "S06E13" on the digit boundary, keeping both
+        // letter groups capitalised.
+        XCTAssertEqual(
+            EpisodeCardPresentation.accessibilityLabel(episodeLabel: "S06E13", title: "Be Still My Heart", runtime: "40m", isWatched: true, progress: nil),
+            "S06E13, Be Still My Heart, 40m, Watched"
+        )
+    }
+
+    func testResolvedAccessibilityLabelMatchesModelOverload() {
+        let m = EpisodeCardModel(episodeLabel: "EPISODE 5", title: "X", synopsis: nil, runtime: "30m", progress: 0.25, isWatched: false)
+        XCTAssertEqual(
+            EpisodeCardPresentation.accessibilityLabel(m),
+            EpisodeCardPresentation.accessibilityLabel(episodeLabel: "EPISODE 5", title: "X", runtime: "30m", isWatched: false, progress: 0.25)
+        )
+    }
 }

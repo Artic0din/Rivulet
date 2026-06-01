@@ -3358,6 +3358,16 @@ struct EpisodeCard: View {
             .prefersDefaultFocus(in: cardFocus)
             .focusEffectDisabled()
             .hoverEffectDisabled()
+            // ADO-01: the play control reads a combined episode summary via the
+            // tested EpisodeCardPresentation policy (episode, title, runtime, state).
+            .accessibilityLabel(EpisodeCardPresentation.accessibilityLabel(
+                episodeLabel: episodeLabel,
+                title: episode.title.isEmpty ? "Episode" : episode.title,
+                runtime: episode.durationFormatted,
+                isWatched: episode.isWatched,
+                progress: episode.watchProgress
+            ))
+            .accessibilityHint("Plays this episode")
 
             // Description — clicking opens the episode detail page so the
             // user can read the full synopsis and pre-play track pickers.
@@ -3417,8 +3427,13 @@ struct EpisodeCard: View {
     }
 
     private var episodeLabel: String {
+        // ADO-01: non-prefix label sourced from the tested EpisodeCardPresentation
+        // policy ("EPISODE n"); the season-prefix path keeps the "S06E13" form
+        // used by the unified all-seasons list.
         if showSeasonPrefix, let epString = episode.episodeString { return epString }
-        if let n = episode.episodeNumber { return "Episode \(n)" }
+        if episode.episodeNumber != nil {
+            return EpisodeCardPresentation.episodeLabel(index: episode.episodeNumber)
+        }
         return episode.episodeString ?? "Episode"
     }
 }

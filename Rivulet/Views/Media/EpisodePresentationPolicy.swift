@@ -139,11 +139,31 @@ nonisolated enum EpisodeCardPresentation {
 
     /// Combined VoiceOver label: episode number, title, runtime, and state.
     static func accessibilityLabel(_ model: EpisodeCardModel) -> String {
-        var parts: [String] = [model.episodeLabel.capitalized, model.title]
-        if let runtime = model.runtime { parts.append(runtime) }
-        if model.isWatched {
+        accessibilityLabel(
+            episodeLabel: model.episodeLabel,
+            title: model.title,
+            runtime: model.runtime,
+            isWatched: model.isWatched,
+            progress: model.progress
+        )
+    }
+
+    /// Resolved-values overload for callers that already hold formatted values
+    /// (e.g. the live `EpisodeCard`, which works in agnostic `MediaItem` terms).
+    /// `episodeLabel` is presented as-is (capitalized) so an "S06E13"-style
+    /// prefix label reads naturally too.
+    static func accessibilityLabel(
+        episodeLabel: String,
+        title: String,
+        runtime: String?,
+        isWatched: Bool,
+        progress: Double?
+    ) -> String {
+        var parts: [String] = [episodeLabel.capitalized, title]
+        if let runtime { parts.append(runtime) }
+        if isWatched {
             parts.append("Watched")
-        } else if let progress = model.progress {
+        } else if let progress {
             parts.append("\(Int(progress * 100)) percent watched")
         }
         return parts.joined(separator: ", ")
