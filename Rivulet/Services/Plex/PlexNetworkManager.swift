@@ -895,34 +895,17 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         state: String = "playing",
         duration: Int? = nil
     ) async throws {
-        guard var components = URLComponents(string: "\(serverURL)/:/timeline") else {
-            throw PlexAPIError.invalidURL
-        }
-
-        var queryItems = [
-            URLQueryItem(name: "key", value: "/library/metadata/\(ratingKey)"),
-            URLQueryItem(name: "ratingKey", value: ratingKey),
-            URLQueryItem(name: "time", value: "\(timeMs)"),
-            URLQueryItem(name: "state", value: state),
-            URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library")
-        ]
-
-        if let dur = duration {
-            queryItems.append(URLQueryItem(name: "duration", value: "\(dur)"))
-        }
-
-        components.queryItems = queryItems
-
-        guard let url = components.url else {
-            throw PlexAPIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-
-        for (key, value) in plexHeaders(authToken: authToken) {
-            request.addValue(value, forHTTPHeaderField: key)
-        }
+        let request = try PlexWatchStateRequestFactory.timelineRequest(
+            serverURL: serverURL,
+            authToken: authToken,
+            ratingKey: ratingKey,
+            timeMs: timeMs,
+            state: state,
+            durationMs: duration,
+            method: "POST",
+            headerPolicy: .standardPlex,
+            includeClientQueryItems: false
+        )
 
         let (_, response) = try await session.data(for: request)
 
@@ -938,24 +921,14 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         authToken: String,
         ratingKey: String
     ) async throws {
-        guard var components = URLComponents(string: "\(serverURL)/:/scrobble") else {
-            throw PlexAPIError.invalidURL
-        }
-
-        components.queryItems = [
-            URLQueryItem(name: "key", value: ratingKey),
-            URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library")
-        ]
-
-        guard let url = components.url else {
-            throw PlexAPIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        for (key, value) in plexHeaders(authToken: authToken) {
-            request.addValue(value, forHTTPHeaderField: key)
-        }
+        let request = try PlexWatchStateRequestFactory.scrobbleRequest(
+            serverURL: serverURL,
+            authToken: authToken,
+            ratingKey: ratingKey,
+            action: .watched,
+            method: "PUT",
+            headerPolicy: .standardPlex
+        )
 
         let (_, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
@@ -974,24 +947,14 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         authToken: String,
         ratingKey: String
     ) async throws {
-        guard var components = URLComponents(string: "\(serverURL)/:/unscrobble") else {
-            throw PlexAPIError.invalidURL
-        }
-
-        components.queryItems = [
-            URLQueryItem(name: "key", value: ratingKey),
-            URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library")
-        ]
-
-        guard let url = components.url else {
-            throw PlexAPIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        for (key, value) in plexHeaders(authToken: authToken) {
-            request.addValue(value, forHTTPHeaderField: key)
-        }
+        let request = try PlexWatchStateRequestFactory.scrobbleRequest(
+            serverURL: serverURL,
+            authToken: authToken,
+            ratingKey: ratingKey,
+            action: .unwatched,
+            method: "PUT",
+            headerPolicy: .standardPlex
+        )
 
         let (_, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,

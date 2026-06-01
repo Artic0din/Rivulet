@@ -121,6 +121,94 @@ final class PlexNetworkManagerURLTests: XCTestCase {
         XCTAssertEqual(queryValue(in: thumbnailURL, named: "X-Plex-Token"), testAuthToken)
     }
 
+    // MARK: - Watch State Boundary Tests
+
+    func testBuildTimelineStateWriteRequestUsesHeaderTokenAndNoTokenQuery() throws {
+        let request = try PlexWatchStateRequestFactory.timelineRequest(
+            serverURL: testServerURL,
+            authToken: testAuthToken,
+            ratingKey: testRatingKey,
+            timeMs: 12_345,
+            state: "playing",
+            durationMs: 67_890,
+            method: "POST",
+            headerPolicy: .standardPlex,
+            includeClientQueryItems: false
+        )
+
+        XCTAssertEqual(request.url?.path, "/:/timeline")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Plex-Token"), testAuthToken)
+        XCTAssertNil(queryValue(in: request.url, named: "X-Plex-Token"))
+        XCTAssertEqual(queryValue(in: request.url, named: "key"), "/library/metadata/\(testRatingKey)")
+        XCTAssertEqual(queryValue(in: request.url, named: "ratingKey"), testRatingKey)
+        XCTAssertEqual(queryValue(in: request.url, named: "time"), "12345")
+        XCTAssertEqual(queryValue(in: request.url, named: "duration"), "67890")
+        XCTAssertEqual(queryValue(in: request.url, named: "state"), "playing")
+        XCTAssertEqual(queryValue(in: request.url, named: "identifier"), "com.plexapp.plugins.library")
+    }
+
+    func testBuildScrobbleStateWriteRequestsUseHeaderTokenAndNoTokenQuery() throws {
+        let watched = try PlexWatchStateRequestFactory.scrobbleRequest(
+            serverURL: testServerURL,
+            authToken: testAuthToken,
+            ratingKey: testRatingKey,
+            action: .watched,
+            method: "PUT",
+            headerPolicy: .standardPlex
+        )
+        let unwatched = try PlexWatchStateRequestFactory.scrobbleRequest(
+            serverURL: testServerURL,
+            authToken: testAuthToken,
+            ratingKey: testRatingKey,
+            action: .unwatched,
+            method: "PUT",
+            headerPolicy: .standardPlex
+        )
+
+        XCTAssertEqual(watched.url?.path, "/:/scrobble")
+        XCTAssertEqual(unwatched.url?.path, "/:/unscrobble")
+        XCTAssertEqual(watched.httpMethod, "PUT")
+        XCTAssertEqual(unwatched.httpMethod, "PUT")
+        XCTAssertEqual(watched.value(forHTTPHeaderField: "X-Plex-Token"), testAuthToken)
+        XCTAssertEqual(unwatched.value(forHTTPHeaderField: "X-Plex-Token"), testAuthToken)
+        XCTAssertNil(queryValue(in: watched.url, named: "X-Plex-Token"))
+        XCTAssertNil(queryValue(in: unwatched.url, named: "X-Plex-Token"))
+        XCTAssertEqual(queryValue(in: watched.url, named: "key"), testRatingKey)
+        XCTAssertEqual(queryValue(in: unwatched.url, named: "key"), testRatingKey)
+        XCTAssertEqual(queryValue(in: watched.url, named: "identifier"), "com.plexapp.plugins.library")
+        XCTAssertEqual(queryValue(in: unwatched.url, named: "identifier"), "com.plexapp.plugins.library")
+    }
+
+    func testPlaybackProgressReporterLegacyRequestsRemainExplicitAndHeaderTokenOnly() throws {
+        let request = try PlexWatchStateRequestFactory.timelineRequest(
+            serverURL: testServerURL,
+            authToken: testAuthToken,
+            ratingKey: testRatingKey,
+            timeMs: 12_345,
+            state: "paused",
+            durationMs: 67_890,
+            method: "GET",
+            headerPolicy: .tokenOnly,
+            includeClientQueryItems: true
+        )
+
+        XCTAssertEqual(request.url?.path, "/:/timeline")
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Plex-Token"), testAuthToken)
+        XCTAssertNil(request.value(forHTTPHeaderField: "X-Plex-Product"))
+        XCTAssertNil(queryValue(in: request.url, named: "X-Plex-Token"))
+        XCTAssertNotNil(queryValue(in: request.url, named: "X-Plex-Client-Identifier"))
+        XCTAssertNotNil(queryValue(in: request.url, named: "X-Plex-Platform"))
+        XCTAssertNotNil(queryValue(in: request.url, named: "X-Plex-Device"))
+        XCTAssertNotNil(queryValue(in: request.url, named: "X-Plex-Product"))
+    }
+
+    func testWatchStateEndpointOwnershipBoundaryIsDocumented() {
+        XCTAssertEqual(PlexWatchStateRequestFactory.adapterOwner, "PMS state-write adapter")
+        XCTAssertTrue(PlexWatchStateRequestFactory.playbackReporterLegacyMethodRationale.contains("Epic 4"))
+    }
+
     // MARK: - Direct Play URL Tests
 
     func testBuildDirectPlayURLIncludesToken() {
