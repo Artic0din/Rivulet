@@ -199,3 +199,96 @@ acceptance of the Epic 4 plan; nothing in Epic 3 blocks it.
 
 Subject to Project Owner acceptance of proposed parity changes (Rule 4) and Epic
 5 pre-ship device/perf validation.
+
+---
+
+## 14. Closure pass revision — ADO-01…06 adoption (2026-06-01)
+
+This report's §1–13 reflect the E3-PR12 state. After it, the **visibility &
+adoption audit** found that several Epic-3 surfaces were BUILT BUT UNUSED (cards,
+labels, policies existed but were not wired into production), which is what
+reopened Epic 3. The ADO slices closed that gap. This section records the final
+adopted state and re-affirms closure.
+
+### 14.1 ADO slices (all live, branch `codex/epic-2-pr4-canonical-hero`)
+
+| Slice | Commit | Adopted into production |
+| --- | --- | --- |
+| ADO-01 / ADO-01B | (E3) | Episode-card label + combined VoiceOver via `EpisodeCardPresentation`; dead parallel `EpisodeContentCard` retired |
+| ADO-02 → shelf settle | (E3) | Recently Added is a live `LandscapeContentCard` shelf; poster→landscape interaction dropped by product decision (dead expansion code removed) |
+| ADO-03 | (E3) | Content Status Label System (`ContentStatusLabel`/`ContentStatusPolicy`/`ContentStatusPlacement`) — architecture + placement + tests; retired the narrow `ScheduleLabelPolicy` |
+| ADO-04 | `edf7528` etc. | TMDb-backed status labels LIVE on Home hero + detail; `includeGuids=1` everywhere; hero auto-rotates |
+| ADO-05 | `ae622f3` | Episode-card status labels LIVE (Season Finale / New Episode Today / New Episode), Plex-backed, placement-gated, specials-guarded |
+| ADO-06 | `8c79f96` | Adaptive artwork-driven backdrop tint (hero + detail) + unified rounded `MetadataBadge` for rating + technical badges |
+| Apple-TV audit | `47b907a` | Benchmark audit (no code) classifying every reference idea |
+
+### 14.2 Built-but-unused recheck
+
+No meaningful BUILT-BUT-UNUSED Epic-3 items remain:
+
+- `LandscapeContentCard` — **live** (Recently Added shelf).
+- `ContentStatusLabel` system — **live** on hero, detail, and episode cards (all
+  three non-shelf placements).
+- `EpisodeCardPresentation` — **live** on the production episode card.
+- `TechnicalBadgePolicy` / `MetadataBadge` — **live** on landscape cards + detail
+  + hero (rating).
+- `DetailMetadataCascade`, `PreviewMotionPolicy`, `ContentPresentationPolicy` —
+  **live** on detail / preview / cards.
+- The superseded `ScheduleLabelPolicy` and the dropped poster-expansion geometry
+  were **removed**, not left dormant.
+
+### 14.3 Parity (ADO-era, replaces §4 proposal — Rule 2 caps all at 4 while
+`DEBT-E0-007/008` are open; none raised to 5)
+
+| Category | Printed | Recommended final | Justification | Evidence |
+| --- | --- | --- | --- | --- |
+| Visual Language | 3 | **4** | Canonical `ContentDesignTokens` + adaptive tint + one shared `MetadataBadge` + landscape shelf + status chips = one deliberate design language across home/detail/cards | `E3-PR2-TOKENS-001`, `ADO-06-TINT-001`, `ADO-06-BADGE-001`, `ADO-06-HIER-001` |
+| Detail | 3 | **4** | Deterministic metadata cascade + live episode cards + cast/crew spotlight + content-status chip + episode-card status + rating badges + adaptive tint; related-content row present | `E3-PR4-CASCADE-001`, `ADO-01-ADOPT-001`, `ADO-05-ADOPT-001`, `ADO-06-BADGE-001` |
+| Hero (Epic 2-owned; Epic 3 reinforced) | 2→(4 proposed) | **4** | Canonical hero (E2-PR4) now also carries the TMDb status chip (ADO-04), auto-rotation, adaptive tint + rating badge (ADO-06) | `E2-PR4-CANONICAL-001`, `ADO-06-TINT-001` |
+| Preview | 4 | **4 (hold)** | Unchanged by ADO; reduce-motion-safe + test-locked already | `E3-PR3-MOTION-001`, `E3-PR3-DETERMINISM-001` |
+| Accessibility | 2→(3 proposed) | **3 (hold, strengthened)** | Status labels fold into combined VoiceOver; episode-card status folded in; tint a11y-gated. Capped at 3 — no on-device VoiceOver/contrast capture yet (Rule 3) | `E3-PR8-A11Y-001`, `ADO-05-A11Y-001`, `ADO-06-TINT-A11Y-001` |
+
+Scores are deliberately **not** inflated: every category is held at ≤4 because
+on-device capture (`DEBT-E0-007`/`DEBT-E0-008`) is the gate to 5, and
+Accessibility stays at 3 because on-device VoiceOver/contrast runs are absent.
+
+### 14.4 Debt classification (closure)
+
+| Debt | Classification | Note |
+| --- | --- | --- |
+| `DEBT-E0-007` Accessibility device capture | **Epic 5 (pre-ship)** — accepted | Caps parity at 4; not an Epic-3 closure blocker |
+| `DEBT-E0-008` Performance numeric capture | **Epic 5 (pre-ship)** — accepted | Harness exists (`HomePerformanceTracer`); numeric runs outstanding |
+| `DEBT-E3-PR7-001` Broader card-row + badge spread | **Accepted debt / future backlog** | ≥1 production row uses cards; badges now on landscape + detail + hero |
+| `DEBT-E3-ADO03-001` Renewed-no-date + on-device label validation | **Accepted debt** — renewed-no-date = future backlog; validation = Epic 5 | Episode-card + decode portions DONE |
+| `DEBT-E3-APPLEREF-001` Adaptive tint + rating badge | **Substantially resolved** (ADO-06); on-device confirmation = Epic 5 | Tint limited to hero+detail by design |
+
+No closure blockers. No debt falsely closed.
+
+### 14.5 Final disposition
+
+**CLOSE EPIC 3 WITH ACCEPTED DEBT.** All decomposition acceptance criteria are
+met or implemented and adopted in production; the visibility-audit reopen
+findings are resolved; the only outstanding items are on-device accessibility +
+numeric-performance capture (Epic 5 pre-ship gate) and minor future-backlog
+adoption — all accepted, dated debt, none an Epic-3 implementation gap.
+
+### 14.6 Epic 4 gate — **NO (do not begin yet)**
+
+Epic 3 closure imposes **no** blocker on Epic 4, but Epic 4's own entry
+preconditions are unmet:
+
+1. **AVKit-first policy not ratified** (still a plan in `epic-4-decomposition.md`,
+   not Project-Owner-accepted).
+2. **Playback stream-URL Sentry leak** (`E0-OBS-002`/`E0-OBS-003`, security)
+   must be scheduled as the FIRST Epic-4 slice (E4-PR1 redaction) before other
+   playback work — the visibility audit's standing condition.
+3. **No media-validation corpus + physical Apple TV** secured for the mandatory
+   playback gate.
+
+Not blockers (already in hand): chapter navigation is already implemented in the
+player (`includeChapters=1` + chapter UI) — Epic 4 validates/polishes, not
+builds; display badges + detail trailer playback exist (capability badges + hero
+silent preview remain Epic 4).
+
+**First Epic 4 slice when authorised:** E4-PR1 — playback stream-URL / Sentry
+redaction (security-first), ahead of any AVKit/route work.

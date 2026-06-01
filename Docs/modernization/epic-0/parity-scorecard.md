@@ -127,3 +127,17 @@ The scorecard is not a vanity metric. Each category requires evidence and cannot
 
 Scores capped at 4 pending device/numeric evidence per Score Change Rule 2.
 Not self-accepted: awaiting domain reviewer + Project Owner sign-off.
+
+### ADO-era reinforcement (Epic 3 closure pass, 2026-06-01)
+
+The ADO-01…06 adoption slices strengthened the Epic-3-owned categories. No score
+is raised beyond 4 (Rule 2: device capture `DEBT-E0-007`/`DEBT-E0-008` open), and
+Accessibility stays at 3 (Rule 3: no on-device VoiceOver/contrast capture yet).
+These supersede the matching rows above, not Home/Navigation/Top Shelf/Focus.
+
+| Category | Current | Proposed | PR | Basis | Remaining before final |
+| --- | --- | --- | --- | --- | --- |
+| Visual Language | 3 | 4 | ADO-06 (+E3-PR2) | Canonical tokens now joined by an adaptive artwork-driven backdrop tint (hero + detail) and one shared rounded `MetadataBadge` unifying rating + technical badges, plus the landscape shelf and content-status chips — one deliberate design language across home/detail/cards. Evidence: `E3-PR2-TOKENS-001`, `ADO-06-TINT-001`, `ADO-06-BADGE-001`, `ADO-06-HIER-001`. | App-wide token/material adoption (settings etc.) + design-review sign-off + on-device comparison set (`DEBT-E0-007`) → blocks reaching 5 |
+| Detail | 3 | 4 | ADO-01/04/05/06 (+E3-PR4) | Deterministic cascade + live episode cards + cast/crew spotlight + TMDb content-status chip + episode-card status labels + first-class rating badges + adaptive tint; related-content row present. Evidence: `E3-PR4-CASCADE-001`, `ADO-01-ADOPT-001`, `ADO-05-ADOPT-001`, `ADO-06-BADGE-001`. | Universal-details unification + on-device hierarchy/contrast review (`DEBT-E0-007`) → blocks reaching 5 |
+| Hero | 2 | 4 | ADO-04/06 (+E2-PR4) | Canonical hero (E2-PR4) reinforced with the TMDb status chip (ADO-04), deterministic ~10s auto-rotation, adaptive tint + rating badge (ADO-06). Evidence: `E2-PR4-CANONICAL-001`, `ADO-04` (hero), `ADO-06-TINT-001`. | On-device hero a11y/reduced-motion + numeric perf capture (`DEBT-E0-007`/`DEBT-E0-008`) → blocks reaching 5 |
+| Accessibility | 2 | 3 | ADO-04/05/06 (+E3-PR8) | Status labels fold into combined VoiceOver on hero/detail/episode cards; episode-card status announced only when visible; adaptive tint a11y-gated (Increase Contrast / Reduce Transparency / Reduce Motion). Held at 3 — no on-device runs. Evidence: `E3-PR8-A11Y-001`, `ADO-05-A11Y-001`, `ADO-06-TINT-A11Y-001`. | On-device VoiceOver/focus/contrast/reduced-motion capture across all primary flows (`DEBT-E0-007`) → blocks reaching 4+ |
