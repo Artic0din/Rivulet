@@ -1099,6 +1099,20 @@ zIndex 0 and later cells painted over the focused overflow.
 | ADO-02C-STACK-005 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` → ** BUILD SUCCEEDED ** | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
 | ADO-02C-STACK-006 | Testing/UX | 2026-06-01 | Epic 3 owner | Focused landscape card now EXPECTED to draw above neighbours. Simulator re-validation still required: Home → Recently Added → focus FUZE → confirm its landscape overflow is NOT covered by the adjacent Crime 101 poster; neighbours unmoved; no clipping | manual simulator review | **Pending (BLOCKS acceptance)** | Pending | Same acceptance gate; stacking is the re-check |
 
+## HERO-ROTATE Evidence Entries (home hero auto-rotation)
+
+The home hero held multiple eligible items but only advanced on manual Next.
+Auto-rotation is now live, driven by a pure, tested policy and a focus-aware wait.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| HERO-ROTATE-001 | Home | 2026-06-01 | Epic 2 owner | `HeroOverlayContent` runs a `.task(id: rotationToken)` wait→advance loop; `HeroRotationPolicy.intervalSeconds = 10` (within 8–12s). Advancing index uses `HeroRotationPolicy.nextIndex` (wrapping), shared with the manual Next button | `Rivulet/Views/Media/Hero/HeroOverlayContent.swift`, `Rivulet/Views/Media/Hero/HeroRotationPolicy.swift` | Gate Satisfying | Pending | Deterministic interval; no per-rotation fetch |
+| HERO-ROTATE-002 | Home | 2026-06-01 | Epic 2 owner | Pause/resume: `HeroRotationPolicy.shouldRotate` gates on itemCount>1, not hero-focused, not busy (play resolving), and active (no detail/preview/player/resume presented and app foreground). Any state change flips `rotationToken`, cancelling+restarting the wait → manual Next resets the timer; focus-in pauses; focus-out resumes | `Rivulet/Views/Media/Hero/HeroRotationPolicy.swift`, `Rivulet/Views/Media/Hero/HeroOverlayContent.swift`, `Rivulet/Views/Media/PlexHomeView.swift` | Gate Satisfying | Pending | Host passes `autoRotationEnabled`; scenePhase checked in-view |
+| HERO-ROTATE-003 | Accessibility | 2026-06-01 | Epic 2 owner | Reduce Motion: rotation still occurs but the slide swap is instant (existing `onChange(of: currentIndex)` gates the crossfade); no autoplay/trailers/video | `Rivulet/Views/Media/Hero/HeroOverlayContent.swift` | Reviewed | Pending | Low-motion respected |
+| HERO-ROTATE-004 | Security | 2026-06-01 | Epic 2 owner | No new provider/network calls per rotation (index change only); no token/logging exposure introduced | working-tree diff + scope scan | Reviewed | Pending | Play/More Info/selection/hero-selection-policy unchanged |
+| HERO-ROTATE-005 | Testing | 2026-06-01 | Epic 2 owner | `HeroRotationPolicyTests` (9): gate true/false for count, focus, busy, inactive; nextIndex advance/wrap/empty; interval in 8–12s. Build green | `xcodebuild … test` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure policy unit-tested; timer is view glue |
+| HERO-ROTATE-006 | Testing/UX | 2026-06-01 | Epic 2 owner | Simulator confirmation (user): Home hero cycles ~every 10s; pauses when Play/More Info focused; manual Next resets; no rotation behind detail/player | manual simulator review | Pending | Pending | Behavioural confirmation |
+
 ## SEC-HLS Evidence Entries (HLS manifest diagnostic token leak)
 
 A simulator run emitted raw `X-Plex-Token=…` in `[HLSEnricher] Patched master

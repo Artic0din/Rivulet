@@ -22,6 +22,9 @@ struct HeroOverlayContent: View {
     let onPlay: (PlexMetadata) -> Void
     var onHeroFocused: (() -> Void)? = nil
     var onHeroExited: (() -> Void)? = nil
+    /// Host gate: false while a detail/preview/player/resume surface is presented
+    /// so the hero does not rotate behind it. Combined with scene phase + focus.
+    var autoRotationEnabled: Bool = true
 
     @ObservedObject private var watchlistService = PlexWatchlistService.shared
 
@@ -36,6 +39,7 @@ struct HeroOverlayContent: View {
     @State private var displayedIndex: Int = 0
     @FocusState private var focusedButton: HeroButton?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     /// How long to wait after `currentIndex` changes before swapping the
     /// visible slide content. Keeps the metadata from popping in ahead of
@@ -55,6 +59,24 @@ struct HeroOverlayContent: View {
     }
 
     private var canAdvance: Bool { items.count > 1 }
+
+    /// Whether auto-rotation may run right now (pure policy + live state).
+    private var rotationActive: Bool {
+        HeroRotationPolicy.shouldRotate(
+            itemCount: items.count,
+            isHeroFocused: focusedButton != nil,
+            isBusy: isResolvingPlay,
+            isActive: autoRotationEnabled && scenePhase == .active
+        )
+    }
+
+    /// Restart token for the rotation wait. Any change cancels and restarts the
+    /// `.task`, which RESETS the interval — so a manual advance (currentIndex),
+    /// focus enter/exit (pause/resume), busy state, scene phase, or item-set
+    /// change all restart the countdown rather than firing mid-wait.
+    private var rotationToken: String {
+        "\(currentIndex)|\(focusedButton != nil)|\(isResolvingPlay)|\(items.count)|\(autoRotationEnabled)|\(scenePhase == .active)"
+    }
 
     /// Must match the hero-section height computed in `PlexHomeView.contentView`
     /// and `PlexLibraryView.contentView` (`UIScreen.main.bounds.height - 180`).
@@ -150,6 +172,19 @@ struct HeroOverlayContent: View {
             if currentIndex >= items.count { currentIndex = 0 }
             if displayedIndex >= items.count { displayedIndex = 0 }
         }
+        // Auto-rotation: wait one interval, then advance. The task is keyed on
+        // `rotationToken`, so any state change (manual advance, focus enter/exit,
+        // busy, scene phase, item set) cancels and restarts the wait — giving
+        // automatic pause/resume and a clean timer reset on manual navigation,
+        // with no per-rotation network or token exposure. Reduce Motion still
+        // rotates; the swap is made instant by the `onChange(of: currentIndex)`
+        // handler above.
+        .task(id: rotationToken) {
+            guard rotationActive else { return }
+            try? await Task.sleep(for: .seconds(HeroRotationPolicy.intervalSeconds))
+            guard !Task.isCancelled, rotationActive else { return }
+            advance()
+        }
     }
 
     // MARK: - Paging Dots
@@ -171,7 +206,8 @@ struct HeroOverlayContent: View {
         guard canAdvance else { return }
         // The backdrop reacts to `currentIndex` immediately; the visible
         // overlay follows ~100ms later via the onChange handler in `body`.
-        currentIndex = (currentIndex + 1) % items.count
+        // Index math is the tested `HeroRotationPolicy` (shared with auto-rotate).
+        currentIndex = HeroRotationPolicy.nextIndex(current: currentIndex, count: items.count)
     }
 
     // MARK: - Play

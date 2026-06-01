@@ -742,7 +742,15 @@ struct PlexHomeView: View {
                                     scrollProxy.scrollTo("homeHero", anchor: .top)
                                 }
                             },
-                            onHeroExited: nil
+                            onHeroExited: nil,
+                            // Pause auto-rotation while a detail/preview/player/
+                            // resume surface is presented — the hero must not
+                            // rotate behind it.
+                            autoRotationEnabled: selectedItem == nil
+                                && selectedMusicItem == nil
+                                && rowPreviewRequest == nil
+                                && !showPreviewCover
+                                && !showResumeChoice
                         )
                         .frame(height: heroSectionHeight)
                         .focusSection()
