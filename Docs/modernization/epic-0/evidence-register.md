@@ -854,3 +854,18 @@ behavior change.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | E3-PR1-DECOMP-001 | Planning | 2026-06-01 | Epic 3 owner | Epic 3 decomposition: objective, scope, non-goals, current-state audit, workstreams, 7 PR slices, acceptance, risks, evidence/a11y/perf/security reqs, regression matrix, closure checklist | `Docs/modernization/epic-3/epic-3-decomposition.md` | Gate Satisfying | Pending | Mirrors Epic 0/1/2 doc style |
 | E3-PR1-AUDIT-001 | Content | 2026-06-01 | Epic 3 owner | Content-surface audit: `ScaledDimensions` is dimensional system but no semantic token layer; `GlassRowStyle` duplicates color/scale/spring literals; `MediaDetailView`/`DiscoverView` lack `ContentStateView`; preview transition/focus untested | `Docs/modernization/epic-3/epic-3-decomposition.md` §4 | Reviewed | Pending | Grounds slices E3-PR2..6 |
+
+## Epic 3 PR 2 Evidence Entries (Content Design System)
+
+E3-PR2 introduces the canonical semantic token layer and refactors `GlassRowStyle`
+to consume it — behavior-identical (token seeds == prior literals).
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E3-PR2-TOKENS-001 | Visual Language | 2026-06-01 | Epic 3 owner | `ContentDesignTokens` (opacity/scale/motion/shape + metadata type ramp) layered over `ScaledDimensions`; single source of content design values | `Rivulet/Views/Components/ContentDesignTokens.swift` | Gate Satisfying | Pending | No physical-size duplication; aliases `ScaledDimensions` |
+| E3-PR2-REFACTOR-001 | Visual Language | 2026-06-01 | Epic 3 owner | `GlassRowStyle` (4 button styles + glass background + row modifier) refactored to tokens; literals removed; behavior-identical | `Rivulet/Views/Components/GlassRowStyle.swift` | Reviewed | Pending | Seeds == prior literals (diff-reviewed) |
+| E3-PR2-ISOLATION-001 | Visual Language/Quality | 2026-06-01 | Epic 3 owner | `ScaledDimensions` marked `nonisolated` (pure constants) so the token ramp references it warning-free under `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; no project-setting change | `Rivulet/Services/UIScale.swift` | Reviewed | Pending | Mirrors E2-PR6 `nonisolated` precedent; strictly more permissive |
+| E3-PR2-DOC-001 | Visual Language | 2026-06-01 | Epic 3 owner | Tracked content design-language doc pinning token values + adoption rules | `Docs/modernization/epic-3/content-design-language.md` | Reviewed | Pending | Governed companion to untracked DESIGN_GUIDE |
+| E3-PR2-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `ContentDesignTokensTests` (6): opacity/scale/shape seeds pinned, type ramp descending + aliases `ScaledDimensions`, resting==1.0; RenderState/HomeRowOrdering regression pass | `xcodebuild … -only-testing:RivuletTests/ContentDesignTokensTests …` | Gate Satisfying | Pending | Pins seeds against drift |
+| E3-PR2-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors, 0 new isolation warnings; targeted tests pass; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+| E3-PR2-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `ContentDesignTokens.swift` (new), `GlassRowStyle.swift`, `UIScale.swift` (`nonisolated`) + test + design doc; no playback/Epic 1/project-setting/rename change | working-tree diff + scope scans | Reviewed | Pending | Foundation only; no surface redesign |

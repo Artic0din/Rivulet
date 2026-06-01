@@ -58,8 +58,10 @@ extension View {
 
 // MARK: - Scaled Dimensions
 
-/// Standard UI dimensions that scale with the display size setting
-enum ScaledDimensions {
+/// Standard UI dimensions that scale with the display size setting.
+/// `nonisolated`: pure constant data, readable from any context (the project
+/// defaults types to `@MainActor`; these constants need no isolation).
+nonisolated enum ScaledDimensions {
     // Poster card dimensions (base sizes - larger for fewer items per row)
     static let posterWidth: CGFloat = 260
     static let posterHeight: CGFloat = 390
