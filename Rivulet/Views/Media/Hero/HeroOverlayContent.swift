@@ -35,6 +35,7 @@ struct HeroOverlayContent: View {
     /// time to crossfade before the logo/metadata/buttons swap in.
     @State private var displayedIndex: Int = 0
     @FocusState private var focusedButton: HeroButton?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// How long to wait after `currentIndex` changes before swapping the
     /// visible slide content. Keeps the metadata from popping in ahead of
@@ -114,6 +115,11 @@ struct HeroOverlayContent: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: Self.heroHeight)
+        // Deterministic initial focus (E2-PR3/E2-PR4): when the hero focus
+        // section is entered, Play is the preferred target rather than whatever
+        // the focus engine would pick. Play is always present, so focus is never
+        // stranded.
+        .defaultFocus($focusedButton, .play)
         .onAppear {
             // Sync the displayed slide with the active index on first load.
             if displayedIndex != currentIndex {
@@ -123,8 +129,13 @@ struct HeroOverlayContent: View {
         .onChange(of: currentIndex) { _, newIndex in
             Task { @MainActor in
                 try? await Task.sleep(for: Self.slideSwapDelay)
-                withAnimation(.easeInOut(duration: 0.22)) {
+                // Reduced Motion: swap content instantly with no crossfade.
+                if reduceMotion {
                     displayedIndex = newIndex
+                } else {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        displayedIndex = newIndex
+                    }
                 }
             }
         }
@@ -149,7 +160,7 @@ struct HeroOverlayContent: View {
                 Capsule()
                     .fill(Color.white.opacity(idx == displayedIndex ? 1.0 : 0.35))
                     .frame(width: idx == displayedIndex ? 22 : 8, height: 8)
-                    .animation(.easeInOut(duration: 0.25), value: displayedIndex)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: displayedIndex)
             }
         }
     }

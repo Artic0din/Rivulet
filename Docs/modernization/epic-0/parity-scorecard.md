@@ -110,3 +110,13 @@ The scorecard is not a vanity metric. Each category requires evidence and cannot
 - Domain reviewer validates the evidence.
 - Project Owner accepts the score change.
 - Epic 5 performs final review of all categories before release decision.
+
+## Proposed Score Changes (pending Project Owner acceptance)
+
+| Category | Current | Proposed | PR | Basis | Remaining before final |
+| --- | --- | --- | --- | --- | --- |
+| Home | 3 | 4 | E2-PR4 | Launch is now hero-first (`showHomeHero` default on); shared RenderState states; deterministic stale-safe focus (E2-PR1/E2-PR3). Blocking issue "row-first instead of hero-first" resolved. Evidence: `E2-PR4-CANONICAL-001`, `E2-PR4-POLICY-001`, `E2-PR4-FOCUS-001`. | On-device A11Y-001 capture (`DEBT-E0-007`) + numeric launch/home perf (`DEBT-E0-008`) → blocks reaching 5 |
+| Hero | 2 | 4 | E2-PR4 | Hero is canonical with deterministic selection (Continue Watching first), stable artwork/logo/metadata, resume/play + more-info actions, deterministic initial focus. Blocking issue "exists but not canonical" resolved. Evidence: `E2-PR4-POLICY-001`, `E2-PR4-FOCUS-001`, `E2-PR4-A11Y-001`. | On-device A11Y-003 + reduced-motion capture (`DEBT-E0-007`); PERF-003 numeric (`DEBT-E0-008`) → blocks reaching 5 |
+
+Scores capped at 4 pending device/numeric evidence per Score Change Rule 2.
+Not self-accepted: awaiting domain reviewer + Project Owner sign-off.

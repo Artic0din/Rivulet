@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Epic 2 PR4: Home is now hero-first — a large cinematic hero leads the Home screen by default, favouring Continue Watching, then featured and recently added content, with Play / More Info actions. (Can still be turned off in settings.)
+
 ### Security
 
 - Epic 2 PR2: Top Shelf no longer shares Plex token-bearing image URLs with the system extension. Artwork is handed off as local files in the App Group; the extension reads local files only. Top Shelf items and deep links are unchanged.

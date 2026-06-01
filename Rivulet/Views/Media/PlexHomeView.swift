@@ -15,7 +15,9 @@ struct PlexHomeView: View {
     @StateObject private var dataStore = PlexDataStore.shared
     @StateObject private var authManager = PlexAuthManager.shared
     @StateObject private var watchlistService = PlexWatchlistService.shared
-    @AppStorage("showHomeHero") private var showHomeHero = false
+    // E2-PR4: hero is the canonical, default Home experience (hero-first).
+    // Remains a user-overridable preference; only the default flips to on.
+    @AppStorage("showHomeHero") private var showHomeHero = true
     @AppStorage("enablePersonalizedRecommendations") private var enablePersonalizedRecommendations = false
     @Environment(\.nestedNavigationState) private var nestedNavState
     @State private var selectedItem: MediaItem?
@@ -610,32 +612,30 @@ struct PlexHomeView: View {
         let allIdentifiers = hubs.compactMap { $0.hubIdentifier }.joined(separator: ", ")
         homeLog.debug("[Hero] available hubs: \(allIdentifiers, privacy: .public)")
 
-        // Some servers expose a curated hub even without Plex Pass — keep
-        // matching it as a higher-priority fallback than Recently Added.
+        // Map each hub to its hero role, then apply the deterministic priority
+        // (Continue Watching > curated/featured > recently added > other) from
+        // `HeroSelectionPolicy`. Hub order is preserved so ties are stable.
         let curatedKeywords = ["recommended", "promoted", "featured", "spotlight"]
-        let curated = hubs.first { hub in
-            guard let id = hub.hubIdentifier?.lowercased(),
-                  hub.Metadata?.isEmpty == false else { return false }
-            return curatedKeywords.contains(where: id.contains)
-        }
-        if let items = curated?.Metadata, !items.isEmpty {
-            homeLog.info("[Hero] Using curated hub \(curated?.hubIdentifier ?? "?", privacy: .public) with \(items.count) items")
-            return Array(items.prefix(Self.heroItemCap)).filter { $0.ratingKey != nil }
-        }
-
-        let recentlyAdded = hubs.first { isRecentlyAddedHub($0) && ($0.Metadata?.isEmpty == false) }
-        if let items = recentlyAdded?.Metadata, !items.isEmpty {
-            homeLog.info("[Hero] Fallback to Recently Added hub with \(items.count) items")
-            return Array(items.prefix(Self.heroItemCap)).filter { $0.ratingKey != nil }
-        }
-
-        if let firstHub = hubs.first(where: { $0.Metadata?.isEmpty == false }),
-           let items = firstHub.Metadata, !items.isEmpty {
-            homeLog.info("[Hero] Fallback to first non-empty hub \(firstHub.hubIdentifier ?? "?", privacy: .public)")
-            return Array(items.prefix(Self.heroItemCap)).filter { $0.ratingKey != nil }
+        let candidates: [HeroHubCandidate] = hubs.map { hub in
+            let id = hub.hubIdentifier?.lowercased() ?? ""
+            let kind: HeroHubKind
+            if isContinueWatchingHub(hub) {
+                kind = .continueWatching
+            } else if curatedKeywords.contains(where: id.contains) {
+                kind = .curated
+            } else if isRecentlyAddedHub(hub) {
+                kind = .recentlyAdded
+            } else {
+                kind = .other
+            }
+            return HeroHubCandidate(kind: kind, identifier: hub.hubIdentifier, items: hub.Metadata ?? [])
         }
 
-        return []
+        let selected = HeroSelectionPolicy.select(from: candidates, cap: Self.heroItemCap)
+        if !selected.isEmpty {
+            homeLog.info("[Hero] Selected \(selected.count) items via HeroSelectionPolicy")
+        }
+        return selected
     }
 
     // MARK: - Recommendations
