@@ -869,3 +869,18 @@ to consume it — behavior-identical (token seeds == prior literals).
 | E3-PR2-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `ContentDesignTokensTests` (6): opacity/scale/shape seeds pinned, type ramp descending + aliases `ScaledDimensions`, resting==1.0; RenderState/HomeRowOrdering regression pass | `xcodebuild … -only-testing:RivuletTests/ContentDesignTokensTests …` | Gate Satisfying | Pending | Pins seeds against drift |
 | E3-PR2-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors, 0 new isolation warnings; targeted tests pass; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
 | E3-PR2-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `ContentDesignTokens.swift` (new), `GlassRowStyle.swift`, `UIScale.swift` (`nonisolated`) + test + design doc; no playback/Epic 1/project-setting/rename change | working-tree diff + scope scans | Reviewed | Pending | Foundation only; no surface redesign |
+
+## Epic 3 PR 3 Evidence Entries (Preview Transition Polish)
+
+E3-PR3 locks the preview determinism contract with tests and adds Reduce Motion
+gating for structural preview transitions; focus restoration preserved.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E3-PR3-AUDIT-001 | Preview | 2026-06-01 | Epic 3 owner | Preview audit: `PreviewStateMachine` already governs phase/exit/motion-lock (untested); focus-restore already returns to originating poster; no Reduce Motion handling | `Docs/modernization/epic-3/E3-PR3-preview-transition.md` | Reviewed | Pending | Establishes the polish scope |
+| E3-PR3-DETERMINISM-001 | Preview | 2026-06-01 | Epic 3 owner | `PreviewStateMachineTests` (9) + `PreviewLoadGate` lock entry→carousel, expand flow, exit (carousel→dismiss / expanded→collapse), out-of-order guards, motion-lock, stale-token invalidation | `RivuletTests/Unit/PreviewTransitionTests.swift` | Gate Satisfying | Pending | Determinism contract pinned |
+| E3-PR3-MOTION-001 | Accessibility/Preview | 2026-06-01 | Epic 3 owner | Pure `PreviewMotionPolicy` wired at entry/paging/expand/collapse; Reduce Motion → instant (lossless) state change; full motion otherwise unchanged | `Rivulet/Views/Media/PreviewMotionPolicy.swift`, `Rivulet/Views/Media/PreviewOverlayHost.swift` | Gate Satisfying | Pending | Closes preview Reduce Motion gap |
+| E3-PR3-FOCUS-001 | Focus | 2026-06-01 | Epic 3 owner | Focus restoration on dismiss unchanged: returns to originating poster (`onDismiss(request.sourceTarget)`); exit decision now test-locked | `Rivulet/Views/Media/PreviewOverlayHost.swift` | Reviewed | Pending | A11Y-007 exit-to-source preserved |
+| E3-PR3-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `PreviewStateMachineTests` (9) + `PreviewMotionPolicyTests` (3) + `FocusRestorationPolicyTests` (10) pass | `xcodebuild … -only-testing:…` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure-logic coverage |
+| E3-PR3-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors, no new isolation warnings; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+| E3-PR3-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `PreviewMotionPolicy.swift` (new), `PreviewOverlayHost.swift` (env + 4 motion sites) + test + audit doc; no focus-restore/playback/cascade change | working-tree diff + scope scans | Reviewed | Pending | Structural motion only |
