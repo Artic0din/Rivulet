@@ -163,12 +163,21 @@ Reference screenshots (Apple TV) reviewed for ADO-04 map to our labels:
 | **"#1 Show on Apple TV"** | **NOT modelled — Apple ranking/branding claim, intentionally excluded** |
 | "Another Season Is Coming" (renewed, no date) | not yet modelled — future `renewed` case (no date) — candidate follow-up |
 
-**Data contingency (honest):** live appearance depends on the backend
-`tmdb/details/{id}` proxy actually passing these TMDb fields through. That proxy
-is server-side and could not be verified from the client in this environment. If
-it projects a subset, `fetchStatusDetail` decodes nils and the hero simply shows
-no chip (graceful). On-device confirmation is the validation step (and also tells
-us whether the proxy passthrough holds). Tracked in `DEBT-E3-ADO03-001`.
+**Proxy passthrough — CONFIRMED (live probe, 2026-06-01).** I queried the
+backend proxy directly (`https://tmdb-proxy.baingurley.workers.dev/tmdb/details/{id}`):
+- Ted Lasso (`97546`, tv): `status="Returning Series"`, `in_production=true`,
+  `next_episode_to_air.air_date="2026-08-04"`, `episode_number=1`, `season 4` →
+  maps to **New Season Aug 2026** (matches the Apple "New Season 5 Aug" reference).
+- Breaking Bad (`1396`, tv): `status="Ended"`, `in_production=false`,
+  `next_episode_to_air=null` → **All Episodes Available**.
+- Dune: Part Two (`693134`, movie): `status="Released"`, past `release_date` →
+  **no label** (correct).
+
+So the proxy is a full passthrough — the status fields arrive and the labels are
+data-backed end to end. The remaining real caveats are: (a) a hero item must
+carry a `tmdbId` at render (Plex-side; hub items without a Guid array resolve to
+no label); (b) on-device VISUAL confirmation of the rendered chip. Both tracked
+in `DEBT-E3-ADO03-001`.
 
 `newEpisodeWeekly` is modelled but not yet emitted (weekly-cadence inference from
 episode air dates is deferred — not faked). "Another Season Is Coming" (renewed
