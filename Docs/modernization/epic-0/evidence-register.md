@@ -710,3 +710,24 @@ If a required evidence item is missing:
 2. The gate reviewer records the missing evidence in the review.
 3. The epic owner either captures the evidence or records a debt acceptance request.
 4. The Project Owner decides whether the gap is blocker, major, or minor.
+
+## Epic 2 PR 1 Evidence Entries
+
+These records capture E2-PR1 (Home Render-State Model and Performance Evidence
+Harness). This is an enabling PR: it adds a shared render-state model, a shared
+state-view surface, and a first-party performance instrumentation harness, with
+no visual redesign and no Epic 1 boundary change. Status `Reviewed` = merge-level
+evidence for the changed surface; promotion to `Gate Satisfying` for Home/parity
+occurs in the later Epic 2 PRs that deliver the user-facing experience.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E2-PR1-AUDIT-001 | Home Architecture | 2026-06-01 | Epic 2 owner | Home rendering flow audit: inline state ladder, data composition, hero/`showHomeHero`, focus, deep-link | `Docs/modernization/epic-2/E2-PR1-home-rendering-audit.md` | Reviewed | Pending | Baseline for the render-state extraction |
+| E2-PR1-MODEL-001 | Render State | 2026-06-01 | Epic 2 owner | Reusable `RenderState<Content>` + `RenderStatePhase` + `RenderStateResolver` (precedence: content > loading > error > empty) | `Rivulet/Views/Components/RenderState.swift` | Reviewed | Pending | Not Plex-specific; ready for Hero/CW/rows reuse |
+| E2-PR1-SURFACE-001 | State Surface | 2026-06-01 | Epic 2 owner | Shared `ContentStateView` with default presentations byte-equivalent to prior Home loading/empty/error views; legacy `loadingView`/`errorView`/`emptyView` removed | `Rivulet/Views/Components/ContentStateView.swift`, `Rivulet/Views/Media/PlexHomeView.swift` | Reviewed | Pending | Architecture only; no visual redesign |
+| E2-PR1-PERF-001 | Performance | 2026-06-01 | Epic 2 owner | `os_signpost` harness wired to live launch→home path (PERF-001/002/003 + data-load/transition/completion); first-party only | `Rivulet/Services/Performance/HomePerformanceTracer.swift`, `Rivulet/ContentView.swift`, `Rivulet/Views/Media/PlexHomeView.swift`, `Docs/modernization/epic-2/E2-PR1-performance-evidence.md` | Reviewed | Pending | Reduces (not closes) `DEBT-E0-008`; numeric Instruments captures still outstanding |
+| E2-PR1-A11Y-001 | Accessibility | 2026-06-01 | Epic 2 owner | Accessibility review of the shared state surface: deterministic retry focus, VoiceOver labels/hint, reduced-motion-safe (static) | `Docs/modernization/epic-2/E2-PR1-accessibility-review.md` | Reviewed | Pending | Foundation only; device A11Y-001/002/003/004 capture deferred to flow-changing PRs |
+| E2-PR1-BUILD-001 | Testing/Build | 2026-06-01 | Epic 2 owner | tvOS simulator build succeeded (exit 0) on UDID `F8288707-280A-4C5F-94AA-24B706E66909` | `xcodebuild -quiet -scheme Rivulet -destination 'platform=tvOS Simulator,id=F8288707-280A-4C5F-94AA-24B706E66909' build` | Reviewed | Pending | Only pre-existing warnings (UIScreen.main, nil-coalescing); none from new files |
+| E2-PR1-TEST-001 | Testing | 2026-06-01 | Epic 2 owner | New tests pass (exit 0): `RenderStateResolverTests` (13), `HomePerformanceTracerTests` (4), plus `HomeComposerTests` | `xcodebuild -quiet test ... -only-testing:RivuletTests/RenderStateResolverTests -only-testing:RivuletTests/HomePerformanceTracerTests -only-testing:RivuletTests/HomeComposerTests` | Reviewed | Pending | Covers loading→content/empty/error transitions, precedence, instrumentation behavior, signpost crash-safety |
+| E2-PR1-REGRESS-001 | Testing/Regression | 2026-06-01 | Epic 2 owner | Epic 1 boundary suites still pass (exit 0): `PlexProviderBoundaryTests`, `PlexWatchlistServiceTests`, `PlexNetworkManagerURLTests` | `xcodebuild -quiet test ... -only-testing:RivuletTests/PlexProviderBoundaryTests -only-testing:RivuletTests/PlexWatchlistServiceTests -only-testing:RivuletTests/PlexNetworkManagerURLTests` | Reviewed | Pending | Proves E2-PR1 did not alter Epic 1 provider/token/watchlist boundaries |
+| E2-PR1-SCOPE-001 | Boundary | 2026-06-01 | Epic 2 owner | E2-PR1 modified only `ContentView.swift` and `PlexHomeView.swift` plus new additive files; no Epic 1 boundary file, no `FeatureFlags` value change, no `Info.plist`/ATS change | working-tree diff | Reviewed | Pending | Confirms no Epic 1 security/token/auth/endpoint/provider-boundary decision was touched |

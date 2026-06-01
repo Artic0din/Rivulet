@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Internal (no user-facing change)
+
+- Epic 2 PR1: shared home render-state model (`RenderState`/`RenderStateResolver`) and reusable `ContentStateView` surface replacing inline Home loading/empty/error views (visually identical).
+- Epic 2 PR1: first-party `os_signpost` performance harness (`HomePerformanceTracer`) for launch→home, render-state, and hero-preparation timings (Epic 0 PERF budgets).
+
 ## 1.0.0 (Build 48)
 
 - Added Discover + Watchlist tabs

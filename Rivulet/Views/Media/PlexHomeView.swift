@@ -125,19 +125,33 @@ struct PlexHomeView: View {
         }
     }
 
+    /// Resolved render state for the credentialed Home path. Not-connected is
+    /// handled separately below (auth is an Epic 1 boundary) and is intentionally
+    /// not part of this content render-state model.
+    private var homeRenderState: RenderState<[PlexHub]> {
+        RenderStateResolver.resolve(
+            isLoading: dataStore.isLoadingHubs,
+            content: dataStore.hubs.isEmpty ? nil : dataStore.hubs,
+            errorMessage: dataStore.hubsError
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 if !authManager.hasCredentials {
                     notConnectedView
-                } else if dataStore.isLoadingHubs && dataStore.hubs.isEmpty {
-                    loadingView
-                } else if let error = dataStore.hubsError, dataStore.hubs.isEmpty {
-                    errorView(error)
-                } else if dataStore.hubs.isEmpty {
-                    emptyView
                 } else {
-                    contentView
+                    // Shared render-state surface (E2-PR1). Default empty/error
+                    // presentations replicate the prior inline views; both retry
+                    // through refreshHubs, matching legacy behavior. No redesign.
+                    ContentStateView(
+                        phase: homeRenderState.phase,
+                        errorMessage: homeRenderState.errorMessage,
+                        onRetry: { Task { await dataStore.refreshHubs() } }
+                    ) {
+                        contentView
+                    }
                 }
             }
             .refreshable {
@@ -149,6 +163,11 @@ struct PlexHomeView: View {
             }
             .onAppear {
                 homeLog.info("PlexHomeView onAppear — cachedHubs=\(self.cachedProcessedHubs.count), dataStoreHubs=\(self.dataStore.hubs.count)")
+                // Initial render state never fires .onChange, so open the
+                // data-load interval here when we appear mid-load.
+                if homeRenderState.phase == .loading {
+                    HomePerformance.tracer.beginHomeDataLoad()
+                }
                 // Initial computation of processed hubs
                 if cachedProcessedHubs.isEmpty && !dataStore.hubs.isEmpty {
                     cachedProcessedHubs = computeProcessedHubs(from: dataStore.hubs)
@@ -178,6 +197,15 @@ struct PlexHomeView: View {
                 // resolve TMDB ids against library content.
                 Task { await upgradeHeroFromTMDB() }
             }
+            .onChange(of: homeRenderState.phase) { oldPhase, newPhase in
+                // PERF: render-state transition + home-data-load span.
+                HomePerformance.tracer.recordRenderStateTransition(from: oldPhase, to: newPhase)
+                if newPhase == .loading {
+                    HomePerformance.tracer.beginHomeDataLoad()
+                } else if oldPhase == .loading {
+                    HomePerformance.tracer.endHomeDataLoad()
+                }
+            }
             .onChange(of: dataStore.hubsVersion) { _, _ in
                 // Recompute cached hubs when global hub data changes (for Continue Watching)
                 cachedProcessedHubs = computeProcessedHubs(from: dataStore.hubs)
@@ -196,6 +224,9 @@ struct PlexHomeView: View {
             .onChange(of: cachedProcessedHubs.isEmpty) { _, isEmpty in
                 homeLog.info("cachedProcessedHubs.isEmpty changed to \(isEmpty) (count: \(self.cachedProcessedHubs.count))")
                 dataStore.isHomeContentReady = !isEmpty
+                if !isEmpty {
+                    HomePerformance.tracer.markHomeComplete()
+                }
             }
             .onChange(of: enablePersonalizedRecommendations) { _, _ in
                 handleRecommendationsToggle()
@@ -452,6 +483,9 @@ struct PlexHomeView: View {
     /// (cache or Recently Added) so the UI never sits empty, then upgrades to
     /// TMDB-curated picks once that fetch + library lookup completes.
     private func selectHeroItems() {
+        // PERF-003 hero preparation window. Captured even while the hero is
+        // flag-gated off (showHomeHero), so the budget is measurable on enable.
+        HomePerformance.tracer.beginHeroPreparation()
         // 1) Cached result wins on cold launch — feels instant.
         if heroItems.isEmpty,
            let cached = dataStore.getCachedHeroItems(forLibrary: "home"),
@@ -468,6 +502,10 @@ struct PlexHomeView: View {
                 dataStore.cacheHeroItems(candidates, forLibrary: "home")
             }
         }
+
+        // Initial hero (cache or hub-backed) is now ready; the TMDB pass below
+        // is an async enhancement, not part of the readiness budget.
+        HomePerformance.tracer.endHeroPreparation()
 
         // 3) Try to upgrade to a TMDB-curated set in the background.
         Task { await upgradeHeroFromTMDB() }
@@ -845,20 +883,6 @@ struct PlexHomeView: View {
         .padding(.bottom, 20)
     }
 
-    // MARK: - Loading View
-
-    private var loadingView: some View {
-        VStack(spacing: 24) {
-            ProgressView()
-                .scaleEffect(1.5)
-            Text("Loading")
-                .font(.title3)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
     // MARK: - Recommendations Section
 
     @ViewBuilder
@@ -919,62 +943,6 @@ struct PlexHomeView: View {
                 restorePreviewFocusTarget: $previewRestoreTarget
             )
         }
-    }
-
-    // MARK: - Error View
-
-    private func errorView(_ error: String) -> some View {
-        VStack(spacing: 24) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 48, weight: .light))
-                .foregroundStyle(.secondary)
-
-            Text("Unable to Load")
-                .font(.title2)
-                .fontWeight(.medium)
-
-            Text(error)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 400)
-
-            Button {
-                Task { await dataStore.refreshHubs() }
-            } label: {
-                Text("Try Again")
-                    .fontWeight(.medium)
-            }
-            .buttonStyle(AppStoreButtonStyle())
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    // MARK: - Empty View
-
-    private var emptyView: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "film.stack")
-                .font(.system(size: 48, weight: .light))
-                .foregroundStyle(.secondary)
-
-            Text("No Content")
-                .font(.title2)
-                .fontWeight(.medium)
-
-            Text("Your Plex library appears to be empty.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-
-            Button {
-                Task { await dataStore.refreshHubs() }
-            } label: {
-                Text("Refresh")
-                    .fontWeight(.medium)
-            }
-            .buttonStyle(AppStoreButtonStyle())
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Not Connected View

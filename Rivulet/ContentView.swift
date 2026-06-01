@@ -45,6 +45,10 @@ struct ContentView: View {
         .onChange(of: dataStore.isHomeContentReady) { _, isReady in
             splashLog.info("isHomeContentReady changed to \(isReady), showSplash=\(self.showSplash)")
             if isReady {
+                // PERF-001/002: first visually-useful home shell is reached when
+                // home content is ready (drives splash dismissal). Closes the
+                // launch interval opened at app-task start.
+                HomePerformance.tracer.markFirstUsefulScreen()
                 Task {
                     try? await Task.sleep(for: .milliseconds(500))
                     splashLog.info("Debounce complete — isHomeContentReady=\(self.dataStore.isHomeContentReady), showSplash=\(self.showSplash)")
@@ -56,6 +60,9 @@ struct ContentView: View {
             }
         }
         .task {
+            // PERF-001/002 launch reference point (in-app). Absolute cold-launch
+            // timing also uses OS process-launch signposts per Epic 0 perf doc.
+            HomePerformance.tracer.beginLaunch()
             // Bootstrap the agnostic media layer registries. Touching the
             // metadata registry initializes it (and registers TMDB). The
             // provider registry needs the active Plex auth state — populate
