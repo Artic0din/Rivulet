@@ -14,6 +14,7 @@
 
 ### Internal (no user-facing change)
 
+- Epic 2 closed (with accepted debt): hero-first Home, prominent Continue Watching, deterministic navigation and focus, normalised/sanitized loading-empty-error states, and secure Top Shelf. Full test suite green (461 passed). On-device accessibility and numeric performance capture remain as pre-ship tasks. See `Docs/modernization/epic-2/epic-2-closure-report.md`.
 - Epic 2 PR6: top-level navigation rules extracted into a deterministic, unit-tested `SidebarNavigationPolicy` (tab-change blocking during nested navigation, profile-switcher routing, and Settings/Discover fallback to Home). Behavior is unchanged; navigation is now provably deterministic. `SidebarTab` is now `nonisolated`, removing a main-actor-isolation warning. No visual change.
 - Epic 2 PR3: deterministic, stale-safe Home focus restoration (`FocusRestorationPolicy` + hardened `FocusMemory`); focus is no longer stranded on items removed by a refresh. No visual change.
 - Epic 2 PR1: shared home render-state model (`RenderState`/`RenderStateResolver`) and reusable `ContentStateView` surface replacing inline Home loading/empty/error views (visually identical).

@@ -833,3 +833,14 @@ the error *copy* so Home never displays technical dumps or token-bearing URLs.
 | E2-PR7-TEST-001 | Testing | 2026-06-01 | Epic 2 owner | `HomeErrorPresentationTests` (10): nil/empty fallback, clean-message passthrough, token-URL/NSError/bare-token never leak, `looksTechnical` | `xcodebuild … -only-testing:RivuletTests/HomeErrorPresentationTests` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Asserts secret strings absent from output |
 | E2-PR7-BUILD-001 | Testing/Build | 2026-06-01 | Epic 2 owner | tvOS build exit 0, 0 errors; new + regression suites pass; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
 | E2-PR7-SCOPE-001 | Boundary | 2026-06-01 | Epic 2 owner | Diff limited to `HomeErrorPresentation.swift` (new), `PlexHomeView.swift` (3 display sites) + test + audit doc; no state-surface redesign, no data-store/auth change, no provider contract change | working-tree diff + scope scans | Reviewed | Pending | Home surfaces only |
+
+## Epic 2 PR 8 Evidence Entries (Closure)
+
+E2-PR8 assembles Epic 2 closure evidence: full-suite validation, parity score
+submissions, and the closure report. No production code change.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E2-PR8-CLOSURE-001 | Epic Closure | 2026-06-01 | Epic 2 owner | Epic 2 closure report: exit-gate status, slices, files, parity, a11y, perf, security, debt, UAT/device-validation required, recommendation (close with accepted debt) | `Docs/modernization/epic-2/epic-2-closure-report.md` | Gate Satisfying | Pending | Mirrors Epic 1 closure structure |
+| E2-PR8-VALIDATION-001 | Testing/Build | 2026-06-01 | Epic 2 owner | Full suite: 461 tests passed, 0 failed; tvOS build exit 0; 9 Epic 2 pure-policy suites enumerated | `xcodebuild … test` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | No regression across Epic 1/playback/parser suites |
+| E2-PR8-PARITY-001 | Parity | 2026-06-01 | Epic 2 owner | Proposed score changes Home/Hero/Navigation/Focus/Top Shelf all → 4 with evidence IDs; capped at 4 pending device/numeric (Rule 2); awaiting Project Owner (Rule 4) | `Docs/modernization/epic-0/parity-scorecard.md` | Reviewed | Pending | Not self-accepted |
