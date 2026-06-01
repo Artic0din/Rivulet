@@ -90,17 +90,11 @@ nonisolated enum ScheduleLabelPolicy {
     }
 }
 
-// MARK: - Episode card
+// MARK: - Episode card presentation
 
-nonisolated struct EpisodeCardModel: Equatable {
-    let episodeLabel: String      // e.g. "EPISODE 13"
-    let title: String
-    let synopsis: String?
-    let runtime: String?          // e.g. "40m"
-    let progress: Double?         // 0..<1 when partially watched, else nil
-    let isWatched: Bool
-}
-
+// ADO-01B: the standalone `EpisodeContentCard` view and its `EpisodeCardModel`
+// were retired — the production `EpisodeCard` (in `MediaDetailView`) is the live,
+// richer episode card and consumes the resolved-values helpers below directly.
 nonisolated enum EpisodeCardPresentation {
     /// "EPISODE 13" (uppercase, Apple-TV-style), or "EPISODE" when index absent.
     static func episodeLabel(index: Int?) -> String {
@@ -108,48 +102,9 @@ nonisolated enum EpisodeCardPresentation {
         return "EPISODE"
     }
 
-    /// Builds the episode card model from raw episode fields. `durationMs` and
-    /// `viewOffsetMs` are the Plex millisecond fields; progress is derived only
-    /// when partially watched (0 < offset < duration).
-    static func model(
-        index: Int?,
-        title: String?,
-        summary: String?,
-        durationMs: Int?,
-        viewOffsetMs: Int?,
-        isWatched: Bool
-    ) -> EpisodeCardModel {
-        let runtimeMinutes = durationMs.map { max(0, $0 / 60_000) }
-        let trimmedSynopsis = summary?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        var progress: Double?
-        if let durationMs, durationMs > 0, let viewOffsetMs, viewOffsetMs > 0, viewOffsetMs < durationMs {
-            progress = Double(viewOffsetMs) / Double(durationMs)
-        }
-
-        return EpisodeCardModel(
-            episodeLabel: episodeLabel(index: index),
-            title: title ?? "Episode",
-            synopsis: (trimmedSynopsis?.isEmpty == false) ? trimmedSynopsis : nil,
-            runtime: RuntimeFormatter.format(minutes: runtimeMinutes),
-            progress: progress,
-            isWatched: isWatched
-        )
-    }
-
-    /// Combined VoiceOver label: episode number, title, runtime, and state.
-    static func accessibilityLabel(_ model: EpisodeCardModel) -> String {
-        accessibilityLabel(
-            episodeLabel: model.episodeLabel,
-            title: model.title,
-            runtime: model.runtime,
-            isWatched: model.isWatched,
-            progress: model.progress
-        )
-    }
-
-    /// Resolved-values overload for callers that already hold formatted values
-    /// (e.g. the live `EpisodeCard`, which works in agnostic `MediaItem` terms).
+    /// Combined VoiceOver label for an episode card: episode number, title,
+    /// runtime, and state. Used live by the production `EpisodeCard`, which works
+    /// in agnostic `MediaItem` terms (already-formatted runtime + progress).
     /// `episodeLabel` is presented as-is (capitalized) so an "S06E13"-style
     /// prefix label reads naturally too.
     static func accessibilityLabel(
