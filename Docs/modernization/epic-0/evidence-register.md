@@ -993,3 +993,13 @@ initials fallback into the existing (already image-loading) `PersonCard`.
 | E3-PR11-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `CastImagePresentationTests` (6): label with/without role, initials (single/two/three-capped/empty) | `xcodebuild … -only-testing:RivuletTests/CastImagePresentationTests` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure-logic coverage |
 | E3-PR11-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
 | E3-PR11-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `CastImagePresentation.swift` (new), `CastMemberCard.swift` (a11y label + initials fallback) + test + audit doc; no provider/token-transport/playback change | working-tree diff + scope scans | Reviewed | Pending | Plex remains image source |
+
+## Epic 3 PR 12 Evidence Entries (Revised Closure)
+
+E3-PR12 supersedes E3-PR9: revised Epic 3 closure incorporating Product
+Direction #2 (episode cards, cast images, schedule labels). No code change.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E3-PR12-CLOSURE-001 | Epic Closure | 2026-06-01 | Epic 3 owner | Revised Epic 3 closure report: §20.7 + §21.4 acceptance met (episode cards/cast images/schedule labels added), slices through E3-PR11, full-suite 533/0, recommendation close-with-debt | `Docs/modernization/epic-3/epic-3-closure-report.md` | Gate Satisfying | Pending | Supersedes E3-PR9-CLOSURE-001 |
+| E3-PR12-VALIDATION-001 | Testing/Build | 2026-06-01 | Epic 3 owner | Full suite: 533 passed, 0 failed; tvOS build exit 0; 10 Epic 3 pure-policy/label suites | `xcodebuild … test` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | +72 over Epic 2 close (461) |

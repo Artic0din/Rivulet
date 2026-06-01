@@ -7,7 +7,12 @@ Status: **Complete with accepted debt** (recommend close; see §13)
 
 Mirrors the Epic 1/2 closure-report structure. Satisfies the Epic 3
 decomposition closure checklist (§15) and the expanded acceptance criteria
-(§20.7).
+(§20.7 and §21.4).
+
+> Revision (E3-PR12): this report supersedes the initial E3-PR9 closure. Epic 3
+> was reopened by Product Direction #2 (decomposition §21) to add episode cards,
+> cast/crew images, and schedule/air-date labels — delivered in E3-PR10/PR11 and
+> reflected below.
 
 ---
 
@@ -34,6 +39,9 @@ Presentation System.
 | Performance evidence exists | Partial | No focus-time fetch verified; numeric capture `DEBT-E0-008` |
 | Focus restoration evidence exists | Met | `FocusRestorationPolicy`/`PreviewStateMachine` tests |
 | No Apple branding/trade-dress/private-API | Met | scope scans; own Glass identity |
+| Episode cards Apple-TV-quality or deferred (§21.4) | Met (component + policy; adoption debt) | E3-PR10 + `DEBT-E3-PR7-001` |
+| Cast/crew images supported or deferred (§21.4) | Met | `PersonCard` images + `CastImagePresentation` (E3-PR11) |
+| Air-date/availability label policy or deferred (§21.4) | Met | `ScheduleLabelPolicy` (E3-PR10) |
 
 All software-buildable criteria met. Performance numeric capture and on-device
 accessibility remain accepted, dated debt (`DEBT-E0-007`/`DEBT-E0-008`), capping
@@ -54,6 +62,9 @@ parity at 4, not blocking closure.
 | E3-PR6 | `1870830` | `ContentPresentationPolicy` (style/title/artwork/runtime/rating/badges/hierarchy) |
 | E3-PR7 | `e077384` | `LandscapeContentCard` (landscape + poster→landscape-on-focus) |
 | E3-PR8 | `2fd2a11` | Content accessibility review + test-count corrections |
+| E3-PR9 | `ab0dd79` | Initial closure (superseded by this revision) |
+| E3-PR10 | `e53cf9f` | Episode cards + `ScheduleLabelPolicy` (Product Direction #2) |
+| E3-PR11 | `c9ba2b2` | Cast/crew VoiceOver + initials fallback (Product Direction #2) |
 
 Each slice is independently reviewable, reversible, build-green, with evidence
 IDs. None modifies an Epic 1 boundary, playback, project setting, deployment
@@ -116,11 +127,13 @@ change. No watchlist mutation added. Clean for changed surfaces (E0-G01/G02/G03)
 
 - `xcodebuild build`: exit 0, 0 errors (UDID `F8288707-…`). New value/policy
   types `nonisolated`; no new isolation warnings.
-- Full suite: **511 tests passed, 0 failed** (+50 over Epic 2's 461).
+- Full suite: **533 tests passed, 0 failed** (+72 over Epic 2's 461).
 - Epic 3 pure-policy suites: `ContentDesignTokensTests` (5),
   `PreviewStateMachineTests` (9), `PreviewMotionPolicyTests` (3),
   `DetailMetadataCascadeTests` (11), `DiscoverPresentationTests` (4),
-  `ContentPresentationPolicyTests` (15), `ContentCardAccessibilityTests` (4).
+  `ContentPresentationPolicyTests` (15), `ContentCardAccessibilityTests` (4),
+  `ScheduleLabelPolicyTests` (9), `EpisodeCardPresentationTests` (6),
+  `CastImagePresentationTests` (6).
 - No regression in Epic 1/2 or playback/parser suites. `git diff --check` clean
   on every commit.
 
