@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Security
+
+- Epic 2 PR2: Top Shelf no longer shares Plex token-bearing image URLs with the system extension. Artwork is handed off as local files in the App Group; the extension reads local files only. Top Shelf items and deep links are unchanged.
+
 ### Internal (no user-facing change)
 
 - Epic 2 PR1: shared home render-state model (`RenderState`/`RenderStateResolver`) and reusable `ContentStateView` surface replacing inline Home loading/empty/error views (visually identical).

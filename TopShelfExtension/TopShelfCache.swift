@@ -1,22 +1,32 @@
 //
 //  TopShelfCache.swift
-//  Rivulet
+//  TopShelfExtension
 //
-//  Manages shared cache for Top Shelf extension via App Groups
+//  Read-only Top Shelf cache access for the TV Services Extension.
+//
+//  DUPLICATE of the read side of `Rivulet/Services/Cache/TopShelfCache.swift`
+//  (extensions cannot import the app module). The extension only READS the
+//  secret-free payload and resolves opaque image filenames to local files in the
+//  App Group container. It never writes the payload, fetches authenticated
+//  remote images, or handles tokens.
 //
 
 import Foundation
+import os
 
-/// Manages read/write access to Top Shelf data in the shared App Group container
-/// Used by both the main app (write) and TV Services Extension (read)
+private let topShelfCacheLog = Logger(subsystem: "com.gstudios.rivulet.TopShelfExtension", category: "TopShelfCache")
+
 final class TopShelfCache: Sendable {
     static let shared = TopShelfCache()
 
     private let appGroupIdentifier = "group.com.bain.Rivulet"
+    private let imagesDirectoryName = "TopShelfImages"
 
     private init() {}
 
-    // MARK: - UserDefaults Suite (more reliable than file access)
+    private var containerURL: URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)
+    }
 
     private var sharedDefaults: UserDefaults? {
         UserDefaults(suiteName: appGroupIdentifier)
@@ -24,66 +34,38 @@ final class TopShelfCache: Sendable {
 
     private let userDefaultsKey = "topShelfItems"
 
-    // MARK: - Write (Main App)
+    // MARK: - Read
 
-    /// Write Top Shelf items to the shared container
-    /// Called by PlexDataStore when Continue Watching data is refreshed
-    func writeItems(_ items: [TopShelfItem]) {
-        print("TopShelfCache: Attempting to write \(items.count) items")
-
-        guard let defaults = sharedDefaults else {
-            print("TopShelfCache: Unable to access App Group UserDefaults - is the entitlement configured?")
-            return
-        }
-
-        do {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(items)
-            defaults.set(data, forKey: userDefaultsKey)
-            defaults.synchronize()
-            print("TopShelfCache: Successfully wrote \(items.count) items to UserDefaults")
-
-            // Debug: print first item
-            if let first = items.first {
-                print("TopShelfCache: First item - \(first.title) (ratingKey: \(first.ratingKey))")
-            }
-        } catch {
-            print("TopShelfCache: Failed to encode items: \(error)")
-        }
-    }
-
-    // MARK: - Read (Extension)
-
-    /// Read Top Shelf items from the shared container
-    /// Called by TV Services Extension to display items
     func readItems() -> [TopShelfItem] {
-        guard let defaults = sharedDefaults else {
-            print("TopShelfCache: Unable to access App Group UserDefaults")
+        guard let defaults = sharedDefaults,
+              let data = defaults.data(forKey: userDefaultsKey) else {
             return []
         }
-
-        guard let data = defaults.data(forKey: userDefaultsKey) else {
-            print("TopShelfCache: No cached items found")
-            return []
-        }
-
         do {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            let items = try decoder.decode([TopShelfItem].self, from: data)
-            print("TopShelfCache: Successfully read \(items.count) items")
-            return items
+            return try decoder.decode([TopShelfItem].self, from: data)
         } catch {
-            print("TopShelfCache: Failed to decode items: \(error)")
+            topShelfCacheLog.error("TopShelf: failed to decode items")
             return []
         }
     }
 
-    // MARK: - Clear
+    // MARK: - Image Handoff (local files only)
 
-    /// Remove all cached Top Shelf items
-    func clear() {
-        sharedDefaults?.removeObject(forKey: userDefaultsKey)
+    private var imagesDirectoryURL: URL? {
+        containerURL?.appendingPathComponent(imagesDirectoryName, isDirectory: true)
+    }
+
+    /// Resolve an opaque payload filename to a local file URL. Rejects
+    /// path-traversal / nested names. Returns nil if the file does not exist.
+    func imageFileURL(forFileName fileName: String) -> URL? {
+        guard isSafeFileName(fileName), let dir = imagesDirectoryURL else { return nil }
+        let url = dir.appendingPathComponent(fileName, isDirectory: false)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    private func isSafeFileName(_ name: String) -> Bool {
+        !name.isEmpty && !name.contains("/") && !name.contains("\\") && name != "." && name != ".." && !name.contains("..")
     }
 }

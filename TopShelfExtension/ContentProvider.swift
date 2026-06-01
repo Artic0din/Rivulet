@@ -32,10 +32,14 @@ class ContentProvider: TVTopShelfContentProvider {
             // Use poster shape for tall artwork
             tvItem.imageShape = .poster
 
-            // Set image from Plex URL (includes auth token)
-            if let url = URL(string: item.imageURL) {
-                tvItem.setImageURL(url, for: .screenScale1x)
-                tvItem.setImageURL(url, for: .screenScale2x)
+            // Secret-free artwork: resolve the opaque filename to a LOCAL file in
+            // the App Group container (bytes the app fetched under its own auth).
+            // No token, no authenticated network fetch from the extension. If no
+            // safe local image exists, omit artwork — the item still displays.
+            if let fileName = item.imageFileName,
+               let localURL = TopShelfCache.shared.imageFileURL(forFileName: fileName) {
+                tvItem.setImageURL(localURL, for: .screenScale1x)
+                tvItem.setImageURL(localURL, for: .screenScale2x)
             }
 
             // Deep link to resume playback

@@ -8,6 +8,9 @@
 import Foundation
 import Combine
 import UIKit
+import os
+
+private let topShelfDataLog = Logger(subsystem: "com.rivulet.app", category: "TopShelf")
 
 @MainActor
 class PlexDataStore: ObservableObject {
@@ -415,8 +418,10 @@ class PlexDataStore: ObservableObject {
                 self.hubsVersion = UUID()
             }
 
-            // Always update Top Shelf cache after fetching (lightweight, idempotent)
-            updateTopShelfCache()
+            // Update Top Shelf cache after fetching. Runs off the hub-refresh
+            // completion path (it now fetches artwork bytes for a secret-free
+            // local handoff) so it never delays home readiness.
+            Task { await self.updateTopShelfCache() }
             self.hubsError = nil
             if updateLoading {
                 self.isLoadingHubs = false
@@ -1034,32 +1039,35 @@ class PlexDataStore: ObservableObject {
 
     /// Update the Top Shelf cache with Continue Watching items
     /// Called after hubs are fetched to keep Top Shelf in sync
-    private func updateTopShelfCache() {
-
+    /// Refresh the Top Shelf payload. SECURITY (E2-PR2 / NET-019): the App Group
+    /// payload is secret-free. The authenticated, token-bearing thumb URL is used
+    /// transiently here ONLY to fetch image bytes via the app's trust-aware image
+    /// session; those bytes are written to a local App Group file and the payload
+    /// stores only the opaque filename. No token, token-bearing URL, or stream
+    /// URL is ever persisted, logged, or handed to the extension.
+    private func updateTopShelfCache() async {
         guard let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken else {
-            print("TopShelf: No server URL or token available")
+            topShelfDataLog.info("TopShelf: no server/token available; skipping update")
             return
         }
 
-        // Use server URL as identifier (unique per server)
+        // Non-secret deep-link server identifier (unchanged from prior behavior).
         let serverIdentifier = serverURL
 
-        // Collect Continue Watching items from hubs
+        // Collect Continue Watching items from hubs.
         var continueWatchingItems: [PlexMetadata] = []
-
         for hub in hubs {
             let identifier = hub.hubIdentifier?.lowercased() ?? ""
             let isContinueWatching = identifier.contains("continuewatching") ||
                                      identifier.contains("ondeck") ||
                                      identifier.contains("inprogress")
-
             if isContinueWatching, let items = hub.Metadata {
                 continueWatchingItems.append(contentsOf: items)
             }
         }
 
-        // Deduplicate by ratingKey and sort by lastViewedAt (Unix timestamp)
+        // Deduplicate by ratingKey and sort by lastViewedAt (most recent first).
         var seen = Set<String>()
         var deduplicatedItems: [PlexMetadata] = []
         for item in continueWatchingItems {
@@ -1067,60 +1075,32 @@ class PlexDataStore: ObservableObject {
             seen.insert(key)
             deduplicatedItems.append(item)
         }
-        // Sort by lastViewedAt descending (most recent first)
         deduplicatedItems.sort { ($0.lastViewedAt ?? 0) > ($1.lastViewedAt ?? 0) }
-        let uniqueItems = deduplicatedItems
 
-        // Convert to TopShelfItem and take top 10
-        let topShelfItems = uniqueItems.prefix(10).compactMap { metadata -> TopShelfItem? in
-            guard let ratingKey = metadata.ratingKey else { return nil }
-
-            // Build title
-            let title: String
-            if metadata.type == "episode" {
-                title = metadata.fullEpisodeTitle ?? metadata.title ?? "Unknown"
-            } else {
-                title = metadata.title ?? "Unknown"
-            }
-
-            // Build image URL with token
-            // For episodes, prefer show poster (grandparentThumb) for Top Shelf display
-            let thumbPath: String
-            if metadata.type == "episode" {
-                thumbPath = metadata.grandparentThumb ?? metadata.parentThumb ?? metadata.thumb ?? ""
-            } else {
-                thumbPath = metadata.thumb ?? ""
-            }
-            var imageURL = thumbPath
-            if !thumbPath.isEmpty && !thumbPath.hasPrefix("http") {
-                imageURL = "\(serverURL)\(thumbPath)"
-            }
-            if !imageURL.contains("X-Plex-Token") && !imageURL.isEmpty {
-                imageURL += imageURL.contains("?") ? "&" : "?"
-                imageURL += "X-Plex-Token=\(token)"
-            }
-
-            // Convert Unix timestamp to Date
-            let lastWatchedDate: Date
-            if let timestamp = metadata.lastViewedAt {
-                lastWatchedDate = Date(timeIntervalSince1970: TimeInterval(timestamp))
-            } else {
-                lastWatchedDate = Date()
-            }
-
-            return TopShelfItem(
-                ratingKey: ratingKey,
-                title: title,
-                subtitle: metadata.grandparentTitle,
-                imageURL: imageURL,
-                progress: metadata.watchProgress ?? 0,
-                type: metadata.type ?? "movie",
-                lastWatched: lastWatchedDate,
-                serverIdentifier: serverIdentifier
+        // Build secret-free drafts (top 10). The token lives only on each draft's
+        // transient authenticatedThumbURL, never in the persisted item.
+        let drafts = deduplicatedItems.prefix(10).compactMap {
+            TopShelfPayloadBuilder.draft(
+                from: $0, serverIdentifier: serverIdentifier, serverURL: serverURL, token: token
             )
         }
 
-        TopShelfCache.shared.writeItems(Array(topShelfItems))
+        // Fetch artwork bytes under the app's authenticated/trust-aware session
+        // and hand off as opaque local files. On any failure, fall back to no
+        // image (the item still displays) — never drop the whole payload.
+        var items: [TopShelfItem] = []
+        items.reserveCapacity(drafts.count)
+        for draft in drafts {
+            var imageFileName: String?
+            if let thumbURL = draft.authenticatedThumbURL,
+               let data = await ImageCacheManager.shared.imageData(for: thumbURL) {
+                imageFileName = TopShelfCache.shared.writeImageData(data, for: draft.ratingKey)
+            }
+            items.append(TopShelfItem(draft: draft, imageFileName: imageFileName))
+        }
+
+        TopShelfCache.shared.writeItems(items)
+        TopShelfCache.shared.pruneImages(keepingFileNames: items.compactMap { $0.imageFileName })
     }
 
     // MARK: - Reset (on sign out)
