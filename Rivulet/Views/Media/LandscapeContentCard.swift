@@ -3,6 +3,7 @@
 //  Rivulet
 //
 //  E3-PR7 — landscape artwork card + poster→landscape-on-focus card.
+//  ADO-02C — corrected poster→landscape geometry.
 //
 //  A production-ready, self-contained content card that renders the canonical
 //  Content Presentation System (E3-PR6): artwork with graceful fallback, a
@@ -11,9 +12,17 @@
 //  tokens for focus emphasis, exposes one combined VoiceOver label, and triggers
 //  NO network work on focus (artwork URLs are passed in, already resolved).
 //
-//  This component is additive: it does not replace existing card usages. Broad
-//  adoption across Home/Library/Discover rows and on-device validation are the
-//  remaining integration steps, tracked as debt (see E3-PR7 docs).
+//  Geometry (ADO-02C): the cell reserves a *poster-shaped* footprint for
+//  `.posterExpandsToLandscape` (so the poster artwork fills it edge-to-edge with
+//  NO black gutters), and the landscape composition on focus is drawn as an
+//  `.overlay` that OVERFLOWS that stable footprint — it never resizes the cell's
+//  layout, so the row never reflows and neighbours never reposition. The host
+//  row raises the focused cell's `zIndex` so the overflow draws above its
+//  neighbours rather than being occluded. `.landscape` cards keep a landscape
+//  footprint and scale-only focus, matching `ContinueWatchingCard`.
+//
+//  This component is additive beyond the rows that adopt it. Broad adoption
+//  across the remaining Home/Library/Discover rows is tracked as debt.
 //
 
 import SwiftUI
@@ -90,9 +99,27 @@ struct LandscapeContentCard: View {
     @Environment(\.uiScale) private var scale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var width: CGFloat { ScaledDimensions.continueWatchingWidth * scale }
-    private var height: CGFloat { ScaledDimensions.continueWatchingHeight * scale }
+    // Landscape composition size (matches ContinueWatchingCard): 392 × 280.
+    private var landscapeWidth: CGFloat { ScaledDimensions.continueWatchingWidth * scale }
+    private var landscapeHeight: CGFloat { ScaledDimensions.continueWatchingHeight * scale }
+    // Poster footprint (matches MediaPosterCard): 260 × 390 — a true 2:3 frame
+    // the poster fills edge-to-edge, so there are no side gutters at rest.
+    private var posterWidth: CGFloat { ScaledDimensions.posterWidth * scale }
+    private var posterHeight: CGFloat { ScaledDimensions.posterHeight * scale }
     private var cornerRadius: CGFloat { ContentDesignTokens.Shape.cornerRadius }
+
+    /// The shape the cell reserves for layout. For `.posterExpandsToLandscape`
+    /// this is poster (portrait) — the landscape state is an overflow overlay,
+    /// not a layout change — so the row never reflows.
+    private var footprintShape: CardShape {
+        ContentPresentationPolicy.footprintShape(style: style)
+    }
+    private var footprintWidth: CGFloat {
+        footprintShape == .landscape ? landscapeWidth : posterWidth
+    }
+    private var footprintHeight: CGFloat {
+        footprintShape == .landscape ? landscapeHeight : posterHeight
+    }
 
     /// Whether the landscape composition is shown — delegated to the tested
     /// `ContentPresentationPolicy.showsLandscapeComposition`.
@@ -101,27 +128,36 @@ struct LandscapeContentCard: View {
     }
 
     var body: some View {
-        // Constant footprint (width × height) in EVERY state, so the row keeps a
-        // fixed height and the cells never reflow, clip, or overlap as focus
-        // moves. The poster-at-rest and landscape compositions are stacked and
-        // cross-faded by opacity — both images load at render time (never on
-        // focus), so focus movement triggers no network fetch.
-        ZStack {
-            landscapeLayer.opacity(showsLandscape ? 1 : 0)
-            posterRestingLayer.opacity(showsLandscape ? 0 : 1)
-        }
-        .frame(width: width, height: height)
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .scaleEffect(isFocused ? ContentDesignTokens.Scale.rowFocused : ContentDesignTokens.Scale.resting)
-        .animation(
-            PreviewMotionPolicy.animation(ContentDesignTokens.Motion.rowFocus, reduceMotion: reduceMotion),
-            value: isFocused
-        )
-        // Accessibility identity is stable across resting/focused states — the
-        // same combined label regardless of which visual layer is shown.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(ContentCardAccessibility.label(title: model.title, infoLine: model.infoLine, badges: model.badges))
-        .accessibilityAddTraits(.isButton)
+        // The cell reserves a STABLE poster-shaped footprint (for
+        // `.posterExpandsToLandscape`); the landscape composition on focus is an
+        // `.overlay` that overflows that footprint without changing the cell's
+        // layout size — so the row never reflows and neighbours never move. Both
+        // images load at render time (never on focus), so focus triggers no
+        // network fetch. The poster and landscape are cross-faded by opacity;
+        // under Reduce Motion the swap is instant (no animation, no info lost).
+        posterRestingLayer
+            .frame(width: footprintWidth, height: footprintHeight)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .opacity(showsLandscape ? 0 : 1)
+            .overlay {
+                landscapeLayer
+                    .frame(width: landscapeWidth, height: landscapeHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                    .opacity(showsLandscape ? 1 : 0)
+                    // Visual only — the host Button owns interaction; the overlay
+                    // must not extend the focusable/hit-test area beyond the cell.
+                    .allowsHitTesting(false)
+            }
+            .scaleEffect(isFocused ? ContentDesignTokens.Scale.rowFocused : ContentDesignTokens.Scale.resting)
+            .animation(
+                PreviewMotionPolicy.animation(ContentDesignTokens.Motion.rowFocus, reduceMotion: reduceMotion),
+                value: isFocused
+            )
+            // Accessibility identity is stable across resting/focused states — the
+            // same combined label regardless of which visual layer is shown.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(ContentCardAccessibility.label(title: model.title, infoLine: model.infoLine, badges: model.badges))
+            .accessibilityAddTraits(.isButton)
     }
 
     // MARK: - Landscape layer (focused / always-landscape)
@@ -138,29 +174,28 @@ struct LandscapeContentCard: View {
                     placeholder
                 }
             }
-            .frame(width: width, height: height)
+            .frame(width: landscapeWidth, height: landscapeHeight)
             .clipped()
             overlay
         }
     }
 
-    // MARK: - Poster resting layer (poster-shaped, fit on dark gutters)
+    // MARK: - Poster resting layer (poster-shaped, fills the 2:3 footprint)
 
     private var posterRestingLayer: some View {
-        ZStack {
-            Color(white: 0.10)
-            CachedAsyncImage(url: model.posterURL ?? model.artwork.url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().aspectRatio(contentMode: .fit) // poster shape, no crop
-                case .empty:
-                    ProgressView().tint(.white.opacity(0.3))
-                case .failure:
-                    placeholder
-                }
+        // The poster `.fill`s a true 2:3 frame, so there are NO side gutters: the
+        // resting state reads as a clean poster, matching `MediaPosterCard`.
+        CachedAsyncImage(url: model.posterURL ?? model.artwork.url) { phase in
+            switch phase {
+            case .success(let image):
+                image.resizable().aspectRatio(contentMode: .fill)
+            case .empty:
+                ZStack { Color(white: 0.10); ProgressView().tint(.white.opacity(0.3)) }
+            case .failure:
+                placeholder
             }
         }
-        .frame(width: width, height: height)
+        .frame(width: footprintWidth, height: footprintHeight)
         .clipped()
     }
 
@@ -214,7 +249,7 @@ struct LandscapeContentCard: View {
             CachedAsyncImage(url: url) { phase in
                 if case .success(let image) = phase {
                     image.resizable().aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: width * 0.6, maxHeight: height * 0.28, alignment: .leading)
+                        .frame(maxWidth: landscapeWidth * 0.6, maxHeight: landscapeHeight * 0.28, alignment: .leading)
                 } else {
                     titleText // graceful fallback while/if the logo is unavailable
                 }

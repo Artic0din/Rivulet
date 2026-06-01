@@ -33,6 +33,18 @@ nonisolated enum ContentPresentationStyle: String, CaseIterable, Sendable {
     static let `default`: ContentPresentationStyle = .poster
 }
 
+/// The geometric shape a card occupies in a given state. This is the heart of
+/// the ADO-02C geometry fix: a `.poster` shape is a portrait footprint that the
+/// poster artwork fills edge-to-edge (no gutters); a `.landscape` shape is the
+/// wide composition. `.posterExpandsToLandscape` is poster-shaped at rest and
+/// landscape-shaped on focus — and because the two shapes differ, the landscape
+/// state must be drawn as a focus overlay that overflows the (stable) poster
+/// footprint, never by resizing the cell's layout (which would reflow the row).
+nonisolated enum CardShape: Equatable, Sendable {
+    case poster
+    case landscape
+}
+
 nonisolated enum ContentPresentationPolicy {
     /// Resolves the effective style from the user's preferred style and whether
     /// landscape artwork is actually available. Styles that need landscape art
@@ -50,16 +62,34 @@ nonisolated enum ContentPresentationPolicy {
         }
     }
 
+    /// The shape a card occupies for a resolved style and focus state. Single
+    /// source of truth for both the footprint (use `shape(style:isFocused:false)`
+    /// for the resting/layout footprint) and the visible composition.
+    ///   - `.poster`: portrait, always.
+    ///   - `.landscape`: landscape, always.
+    ///   - `.posterExpandsToLandscape`: poster at rest → landscape on focus.
+    static func shape(style: ContentPresentationStyle, isFocused: Bool) -> CardShape {
+        switch style {
+        case .poster: return .poster
+        case .landscape: return .landscape
+        case .posterExpandsToLandscape: return isFocused ? .landscape : .poster
+        }
+    }
+
+    /// The shape the cell reserves for layout (its resting footprint). The row
+    /// reserves this in every state so neighbours never reflow; a focus that
+    /// changes the shape is drawn as an overlay over this stable footprint.
+    static func footprintShape(style: ContentPresentationStyle) -> CardShape {
+        shape(style: style, isFocused: false)
+    }
+
     /// Whether the landscape composition (artwork + metadata overlay) is shown
     /// for a resolved style and focus state. `.landscape` always shows it;
     /// `.poster` never does; `.posterExpandsToLandscape` shows it only on focus
-    /// (poster-shaped at rest → landscape on focus).
+    /// (poster-shaped at rest → landscape on focus). Derived from `shape(...)`
+    /// so there is one source of truth.
     static func showsLandscapeComposition(style: ContentPresentationStyle, isFocused: Bool) -> Bool {
-        switch style {
-        case .landscape: return true
-        case .poster: return false
-        case .posterExpandsToLandscape: return isFocused
-        }
+        shape(style: style, isFocused: isFocused) == .landscape
     }
 }
 

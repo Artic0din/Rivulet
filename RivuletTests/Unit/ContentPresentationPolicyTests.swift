@@ -52,6 +52,49 @@ final class ContentPresentationPolicyTests: XCTestCase {
         XCTAssertTrue(ContentPresentationPolicy.showsLandscapeComposition(style: .posterExpandsToLandscape, isFocused: true))
     }
 
+    // MARK: - Card shape / footprint geometry (ADO-02C)
+
+    func testShapePosterAlwaysPoster() {
+        XCTAssertEqual(ContentPresentationPolicy.shape(style: .poster, isFocused: false), .poster)
+        XCTAssertEqual(ContentPresentationPolicy.shape(style: .poster, isFocused: true), .poster)
+    }
+
+    func testShapeLandscapeAlwaysLandscape() {
+        XCTAssertEqual(ContentPresentationPolicy.shape(style: .landscape, isFocused: false), .landscape)
+        XCTAssertEqual(ContentPresentationPolicy.shape(style: .landscape, isFocused: true), .landscape)
+    }
+
+    func testShapePosterExpandsIsPosterAtRestLandscapeOnFocus() {
+        // The geometry fix: poster-shaped footprint at rest (no gutters),
+        // landscape composition only once focused.
+        XCTAssertEqual(ContentPresentationPolicy.shape(style: .posterExpandsToLandscape, isFocused: false), .poster)
+        XCTAssertEqual(ContentPresentationPolicy.shape(style: .posterExpandsToLandscape, isFocused: true), .landscape)
+    }
+
+    func testFootprintShapeIsRestingShape() {
+        // The cell reserves the resting shape for layout in EVERY state, so the
+        // row never reflows when focus changes the visible composition.
+        XCTAssertEqual(ContentPresentationPolicy.footprintShape(style: .poster), .poster)
+        XCTAssertEqual(ContentPresentationPolicy.footprintShape(style: .landscape), .landscape)
+        // posterExpands reserves a POSTER footprint even though focus shows
+        // landscape — the landscape state is an overflow overlay, not a resize.
+        XCTAssertEqual(ContentPresentationPolicy.footprintShape(style: .posterExpandsToLandscape), .poster)
+    }
+
+    func testShowsLandscapeIsDerivedFromShape() {
+        // showsLandscapeComposition must agree with shape(...) == .landscape for
+        // every (style, focus) combination — one source of truth.
+        for style in ContentPresentationStyle.allCases {
+            for focused in [false, true] {
+                XCTAssertEqual(
+                    ContentPresentationPolicy.showsLandscapeComposition(style: style, isFocused: focused),
+                    ContentPresentationPolicy.shape(style: style, isFocused: focused) == .landscape,
+                    "mismatch for style=\(style) focused=\(focused)"
+                )
+            }
+        }
+    }
+
     func testAccessibilityLabelStableAcrossFocusStates() {
         // The combined label must not depend on focus/landscape state.
         let label = ContentCardAccessibility.label(title: "Dune", infoLine: ["M", "2021"], badges: [])

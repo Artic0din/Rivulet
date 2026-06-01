@@ -1304,6 +1304,12 @@ struct InfiniteContentRow: View {
                         }
                         .previewSourceAnchor(rowID: rowID, itemID: sourceItemID(for: item, index: index))
                         .buttonStyle(CardButtonStyle())
+                        // ADO-02C: for poster→landscape rows the focused cell's
+                        // landscape composition overflows its poster footprint;
+                        // raise its zIndex so the overflow draws ABOVE neighbours
+                        // instead of being occluded by later cells. No layout
+                        // change — neighbours never reflow, only draw order.
+                        .zIndex(cardStyle != .poster && focusedItemId == focusId(for: item) ? 1 : 0)
                         .focused($focusedItemId, equals: focusId(for: item))
                         .modifier(ContinueWatchingContextMenuModifier(
                             item: item,
