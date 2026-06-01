@@ -1080,6 +1080,25 @@ the alternative "landscape-at-rest" as a silent scope reduction.
 | ADO-02C-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `LandscapeContentCard.swift` (geometry), `ContentPresentationPolicy.swift` (`CardShape`/`shape`/`footprintShape`), `PlexHomeView.swift` (focused-cell `zIndex`) + tests + docs; no playback/provider/watch-state/token-transport/project-setting/rename; one row only | working-tree diff + scope scans | Reviewed | Pending | ADO-02/02B preserved, not reverted; bounded |
 | ADO-02C-VALIDATION-001 | Testing/UX | 2026-06-01 | Epic 3 owner | On-device/simulator VISUAL confirmation is the user's step (unit tests cannot prove no reflow/clip/gutters). Steps: run Rivulet on tvOS sim → Home → Recently Added → move focus across cards → confirm poster-shaped at rest (no black side bars), landscape backdrop+logo on focus, neighbours do not shift, no clipping, Reduce Motion = instant swap | manual simulator review | **Pending (BLOCKS acceptance)** | Pending | Acceptance gate per ADO-02C §11 |
 
+## ADO-02C Correction Evidence Entries (focused overlay stacking)
+
+The first ADO-02C attempt fixed the gutters (geometry) but FAILED the stacking
+criterion: simulator review showed the focused landscape overflow (FUZE) drawn
+BEHIND the next poster (Crime 101). Root cause: the `.zIndex` was applied
+mid-chain (before `.focused`/`.modifier`/`.onAppear`), so it landed on an inner
+view, not the view the `LazyHStack` realizes as its direct child. zIndex does not
+propagate up through wrapper modifiers, so every realized sibling kept the default
+zIndex 0 and later cells painted over the focused overflow.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ADO-02C-STACK-001 | Focus/Layout | 2026-06-01 | Epic 3 owner | Moved `.zIndex(focused ? 1000 : 0)` to be the OUTERMOST modifier on the ForEach row item (after `.onAppear`), so it lands on the LazyHStack's realized direct child and raises the focused cell above all siblings. Hierarchy level corrected: row-item/Button container, not inner `LandscapeContentCard` | `Rivulet/Views/Media/PlexHomeView.swift` | Gate Satisfying | Pending | Draw order only; no layout/offset change |
+| ADO-02C-STACK-002 | Focus/Layout | 2026-06-01 | Epic 3 owner | No reflow / no horizontal neighbour repositioning (footprint unchanged); `.scrollClipDisabled()` on the ScrollView (pre-existing) still permits overflow; only `.posterExpandsToLandscape`/landscape rows raise (poster rows stay 0, unchanged). Selection/preview/focus-restoration/context-menu wiring untouched | `Rivulet/Views/Media/PlexHomeView.swift` | Reviewed | Pending | Occlusion of neighbours by focused card is intended |
+| ADO-02C-STACK-003 | Accessibility | 2026-06-01 | Epic 3 owner | No a11y change: card is still one `.accessibilityElement(children:.ignore)` with the same combined label at rest/focus; zIndex is visual ordering only | `Rivulet/Views/Media/LandscapeContentCard.swift` (unchanged), `Rivulet/Views/Media/PlexHomeView.swift` | Reviewed | Pending | Verified by `ContentCardAccessibilityTests` (no regression) |
+| ADO-02C-STACK-004 | Testing | 2026-06-01 | Epic 3 owner | View-hierarchy/SwiftUI draw-order behaviour — no pure unit seam (stacking is not a testable value); no fragile snapshot test invented. Regression suites pass: ContentPresentationPolicy/PlexContentCardMapper/ContentCardAccessibility/FocusRestorationPolicy/FocusMemory/PlexProviderBoundary | `xcodebuild … test` → ** TEST SUCCEEDED ** | Reviewed | Pending | Stacking proof is the simulator review |
+| ADO-02C-STACK-005 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` → ** BUILD SUCCEEDED ** | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+| ADO-02C-STACK-006 | Testing/UX | 2026-06-01 | Epic 3 owner | Focused landscape card now EXPECTED to draw above neighbours. Simulator re-validation still required: Home → Recently Added → focus FUZE → confirm its landscape overflow is NOT covered by the adjacent Crime 101 poster; neighbours unmoved; no clipping | manual simulator review | **Pending (BLOCKS acceptance)** | Pending | Same acceptance gate; stacking is the re-check |
+
 ## SEC-HLS Evidence Entries (HLS manifest diagnostic token leak)
 
 A simulator run emitted raw `X-Plex-Token=…` in `[HLSEnricher] Patched master

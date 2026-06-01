@@ -1304,12 +1304,6 @@ struct InfiniteContentRow: View {
                         }
                         .previewSourceAnchor(rowID: rowID, itemID: sourceItemID(for: item, index: index))
                         .buttonStyle(CardButtonStyle())
-                        // ADO-02C: for poster→landscape rows the focused cell's
-                        // landscape composition overflows its poster footprint;
-                        // raise its zIndex so the overflow draws ABOVE neighbours
-                        // instead of being occluded by later cells. No layout
-                        // change — neighbours never reflow, only draw order.
-                        .zIndex(cardStyle != .poster && focusedItemId == focusId(for: item) ? 1 : 0)
                         .focused($focusedItemId, equals: focusId(for: item))
                         .modifier(ContinueWatchingContextMenuModifier(
                             item: item,
@@ -1329,6 +1323,16 @@ struct InfiniteContentRow: View {
                                 }
                             }
                         }
+                        // ADO-02C correction: for poster→landscape rows the focused
+                        // cell's landscape composition overflows its poster
+                        // footprint. zIndex MUST be the OUTERMOST modifier so it
+                        // lands on the view the LazyHStack realizes as its direct
+                        // child — zIndex does not propagate up through wrapper
+                        // modifiers, so an inner zIndex left every sibling at 0 and
+                        // later cells painted over the focused overflow. Raising the
+                        // realized cell makes the focused overflow draw ABOVE its
+                        // neighbours. Layout is unchanged — draw order only.
+                        .zIndex(cardStyle != .poster && focusedItemId == focusId(for: item) ? 1000 : 0)
                     }
 
                     // Loading indicator at the end
