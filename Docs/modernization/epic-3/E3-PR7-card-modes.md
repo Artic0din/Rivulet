@@ -49,6 +49,6 @@ wired in, it cannot regress existing surfaces.
 ## Validation
 
 - `xcodebuild build` exit 0, 0 errors.
-- `ContentCardAccessibilityTests` (4) + `ContentPresentationPolicyTests` (17)
+- `ContentCardAccessibilityTests` (4) + `ContentPresentationPolicyTests` (15)
   pass → ** TEST SUCCEEDED **.
 - `git diff --check` clean.
