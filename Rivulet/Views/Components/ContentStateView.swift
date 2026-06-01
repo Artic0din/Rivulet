@@ -43,6 +43,15 @@ struct ContentStatePresentation: Equatable {
         message: "",
         actionTitle: "Try Again"
     )
+
+    /// Calm empty surface for Discover when no curated content resolves
+    /// (E3-PR5). No retry action — Discover refreshes itself on appear.
+    static let discoverEmpty = ContentStatePresentation(
+        systemImage: "sparkles",
+        title: "Nothing to Discover Right Now",
+        message: "New recommendations will appear here once they load. Check back soon.",
+        actionTitle: nil
+    )
 }
 
 /// Renders a data-backed surface across its render-state phases with one shared,

@@ -15,6 +15,7 @@
 
 ### Internal (no user-facing change)
 
+- Epic 3 PR5: Discover now shows a calm loading and empty state instead of a blank page when no recommendations have loaded yet. Watchlist feedback is unchanged.
 - Epic 3 PR4: detail-page hero metadata now renders in a deterministic, tested order (type → genres → year · duration) via `DetailMetadataCascade`. Behavior-identical; ordering is no longer scattered inline. No visual change.
 - Epic 3 PR2: introduced a canonical content design-token layer (`ContentDesignTokens`) over `ScaledDimensions` and refactored `GlassRowStyle` to consume it. Behavior-identical (token values equal the prior literals, pinned by tests); establishes one source of truth for content focus opacities, scales, motion, depth, and the metadata type ramp. No visual change.
 - Epic 3 PR1: Apple TV Content Experience decomposition + content-surface baseline audit (`Docs/modernization/epic-3/epic-3-decomposition.md`). Planning only; no behavior change.

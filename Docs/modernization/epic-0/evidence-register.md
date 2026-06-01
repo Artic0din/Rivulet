@@ -898,3 +898,18 @@ behavior-identical, no structural detail rewrite.
 | E3-PR4-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `DetailMetadataCascadeTests` (11): type mapping (movie/show/season/episode/collection/person/unknown), genre cap, chronology order + nil-filtering | `xcodebuild … -only-testing:RivuletTests/DetailMetadataCascadeTests` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure-logic coverage |
 | E3-PR4-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
 | E3-PR4-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `DetailMetadataCascade.swift` (new), `MediaDetailView.swift` (2 delegation sites) + test + audit doc; no playback/provider/structural-detail change | working-tree diff + scope scans | Reviewed | Pending | Text-segment ordering only |
+
+## Epic 3 PR 5 Evidence Entries (Discover/Watchlist Presentation)
+
+E3-PR5 adds a calm Discover loading/empty surface via a pure phase policy;
+watchlist write copy already safe; `DEBT-E1-PR10-001` carried (boundary-blocked).
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E3-PR5-AUDIT-001 | Discover/Watchlist | 2026-06-01 | Epic 3 owner | Audit: watchlist write copy already calm/controlled (no leak); Discover had only a `loading` flag and rendered blank when no content resolved | `Docs/modernization/epic-3/E3-PR5-discover-watchlist-presentation.md` | Reviewed | Pending | Scopes the presentation gap |
+| E3-PR5-PRESENT-001 | Discover | 2026-06-01 | Epic 3 owner | Pure `DiscoverPresentation.phase` (content>loading>empty) + `DiscoverViewModel.hasContent/presentationPhase`; `DiscoverView` overlays shared `ContentStateView` (calm loading + `discoverEmpty`), non-interactive, never hides content | `Rivulet/Views/Discover/DiscoverPresentation.swift`, `Rivulet/Views/Discover/DiscoverView.swift`, `Rivulet/Views/Components/ContentStateView.swift` | Gate Satisfying | Pending | Reuses Epic 2 state surface |
+| E3-PR5-DEBT-001 | Boundary/Debt | 2026-06-01 | Epic 3 owner | `DEBT-E1-PR10-001` carried: resolving requires changing the Epic 1 `MediaProvider` boundary (forbidden / stop condition); no provider watchlist writes added | `Docs/modernization/epic-0/debt-register.md` | Reviewed | Pending | Honest non-closure with rationale |
+| E3-PR5-A11Y-001 | Accessibility | 2026-06-01 | Epic 3 owner | A11Y-010: empty/loading surface reuses accessible motion-free `ContentStateView`; Discover/watchlist actions unchanged | `Docs/modernization/epic-3/E3-PR5-discover-watchlist-presentation.md` | Reviewed | Pending | Device capture pending (`DEBT-E0-007`) |
+| E3-PR5-TEST-001 | Testing | 2026-06-01 | Epic 3 owner | `DiscoverPresentationTests` (4) + `RenderStateResolverTests` (12) pass | `xcodebuild … -only-testing:…` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Pure-logic coverage |
+| E3-PR5-BUILD-001 | Testing/Build | 2026-06-01 | Epic 3 owner | tvOS build exit 0, 0 errors; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+| E3-PR5-SCOPE-001 | Boundary | 2026-06-01 | Epic 3 owner | Diff limited to `DiscoverPresentation.swift` (new), `DiscoverView.swift` (VM props + overlay), `ContentStateView.swift` (`discoverEmpty`) + test + audit doc; no Epic 1/provider/watchlist-write/playback change | working-tree diff + scope scans | Reviewed | Pending | Presentation only |

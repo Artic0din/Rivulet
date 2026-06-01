@@ -161,6 +161,20 @@ struct DiscoverView: View {
                 .scrollClipDisabled()
                 .ignoresSafeArea(.container, edges: heroActive ? [.top, .horizontal] : [])
             }
+
+            // Calm loading/empty surface when no curated content has resolved
+            // (E3-PR5). Reuses the shared ContentStateView; never shown once any
+            // section/hero/For-You content is present.
+            if viewModel.presentationPhase != .content {
+                ContentStateView(
+                    phase: viewModel.presentationPhase,
+                    loadingLabel: "Finding Something to Watch",
+                    empty: .discoverEmpty
+                ) {
+                    Color.clear
+                }
+                .allowsHitTesting(false)
+            }
         }
         .task { await viewModel.load() }
         .fullScreenCover(item: $presentedPlexItem) { metadata in
@@ -263,6 +277,19 @@ final class DiscoverViewModel: ObservableObject {
     @Published private(set) var inLibraryTMDBIds: Set<Int> = []
     @Published private(set) var heroItems: [TMDBListItem] = []
     @Published private(set) var loading = false
+
+    /// True when any Discover surface (hero, a curated section, or For You) has
+    /// resolved content. Drives the calm loading/empty surface (E3-PR5).
+    var hasContent: Bool {
+        !heroItems.isEmpty
+            || !forYou.isEmpty
+            || sectionItems.values.contains { !$0.isEmpty }
+    }
+
+    /// Deterministic render phase for the Discover surface (E3-PR5).
+    var presentationPhase: RenderStatePhase {
+        DiscoverPresentation.phase(isLoading: loading, hasContent: hasContent)
+    }
 
     private let discoverService = TMDBDiscoverService.shared
     private let recommendationService = DiscoverRecommendationService.shared
