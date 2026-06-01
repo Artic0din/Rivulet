@@ -35,9 +35,15 @@ enum SidebarTab: Hashable {
 /// the root page. A dedicated flag lets us hide the tab bar and block tab
 /// switches while in a Settings sub-page without that race.
 @MainActor
-class NestedNavigationState: ObservableObject {
+final class NestedNavigationState: ObservableObject {
     @Published var isNested: Bool = false
     @Published var isSettingsSubPage: Bool = false
+
+    /// Nonisolated so the value can be constructed for the SwiftUI environment
+    /// default (`EnvironmentKey.defaultValue`, a nonisolated static) without a
+    /// main-actor hop. Only initialises literal-defaulted stored properties; all
+    /// subsequent state access remains main-actor isolated.
+    nonisolated init() {}
 }
 
 /// Environment key for nested navigation state
