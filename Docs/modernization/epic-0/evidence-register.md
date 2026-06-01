@@ -817,3 +817,19 @@ navigation engine and no visual redesign.
 | E2-PR6-TEST-001 | Testing | 2026-06-01 | Epic 2 owner | `SidebarNavigationPolicyTests` (12): ordinary/library select, block-while-nested/subpage, account switcher vs ignore, account-never-stored, all fallback branches | `xcodebuild … -only-testing:RivuletTests/SidebarNavigationPolicyTests` | Gate Satisfying | Pending | Pure-logic coverage for nav decisions |
 | E2-PR6-BUILD-001 | Testing/Build | 2026-06-01 | Epic 2 owner | tvOS build exit 0, 0 errors, 0 new isolation warnings; targeted tests pass (Sidebar 12 + Home ordering + Focus restoration); `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
 | E2-PR6-SCOPE-001 | Boundary | 2026-06-01 | Epic 2 owner | Diff limited to `SidebarNavigationPolicy.swift` (new), `TVSidebarView.swift` (delegation), `NavigationEnvironment.swift` (`nonisolated`) + test + audit doc; no swizzle/watchdog/deep-link/FeatureFlags/project-setting/Epic 1 change | working-tree diff + scope scans | Reviewed | Pending | No custom nav engine, no visual redesign |
+
+## Epic 2 PR 7 Evidence Entries
+
+E2-PR7 (Home Loading, Empty, Error, and Recovery Polish). Loading/empty/error
+structure and retry focus were already correct (E2-PR1); this slice sanitizes
+the error *copy* so Home never displays technical dumps or token-bearing URLs.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E2-PR7-AUDIT-001 | Home/State | 2026-06-01 | Epic 2 owner | State surface audit: `ContentStateView` structure/retry-focus/a11y already polished (E2-PR1); gap was raw `localizedDescription` reaching three Home error displays | `Docs/modernization/epic-2/E2-PR7-home-state-polish.md` | Reviewed | Pending | Establishes the copy-sanitization scope |
+| E2-PR7-COPY-001 | Home/State | 2026-06-01 | Epic 2 owner | Pure `HomeErrorPresentation.userFacingMessage(for:)`: redactor scrub + technical-shape fallback; clean messages pass through, technical/secret strings → calm generic copy | `Rivulet/Views/Media/HomeErrorPresentation.swift`, `Rivulet/Views/Media/PlexHomeView.swift` | Gate Satisfying | Pending | Wired consumer-side at all 3 Home error surfaces |
+| E2-PR7-SEC-001 | Security/Privacy | 2026-06-01 | Epic 2 owner | UI error-copy leak vector closed: no token/credential/URL can reach on-screen Home copy; consumer-side only (no `PlexDataStore`/`PlexAuthManager` change) | `Rivulet/Views/Media/HomeErrorPresentation.swift` | Gate Satisfying | Pending | E0-G01/G03/G08; reduces `DEBT-E0-004` for Home error sink |
+| E2-PR7-A11Y-001 | Accessibility | 2026-06-01 | Epic 2 owner | A11Y-001: error/empty/loading keep combined VoiceOver element + deterministic retry focus + motion-free; copy now plain-language | `Docs/modernization/epic-2/E2-PR7-home-state-polish.md` | Reviewed | Pending | Device capture deferred (`DEBT-E0-007`) |
+| E2-PR7-TEST-001 | Testing | 2026-06-01 | Epic 2 owner | `HomeErrorPresentationTests` (10): nil/empty fallback, clean-message passthrough, token-URL/NSError/bare-token never leak, `looksTechnical` | `xcodebuild … -only-testing:RivuletTests/HomeErrorPresentationTests` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Asserts secret strings absent from output |
+| E2-PR7-BUILD-001 | Testing/Build | 2026-06-01 | Epic 2 owner | tvOS build exit 0, 0 errors; new + regression suites pass; `git diff --check` clean | `xcodebuild build` / `xcodebuild test` | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
+| E2-PR7-SCOPE-001 | Boundary | 2026-06-01 | Epic 2 owner | Diff limited to `HomeErrorPresentation.swift` (new), `PlexHomeView.swift` (3 display sites) + test + audit doc; no state-surface redesign, no data-store/auth change, no provider contract change | working-tree diff + scope scans | Reviewed | Pending | Home surfaces only |

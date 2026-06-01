@@ -132,7 +132,9 @@ struct PlexHomeView: View {
         RenderStateResolver.resolve(
             isLoading: dataStore.isLoadingHubs,
             content: dataStore.hubs.isEmpty ? nil : dataStore.hubs,
-            errorMessage: dataStore.hubsError
+            // E2-PR7: present calm, secret-free copy rather than a raw
+            // localizedDescription that could carry a token-bearing URL.
+            errorMessage: dataStore.hubsError.map { HomeErrorPresentation.userFacingMessage(for: $0) }
         )
     }
 
@@ -849,7 +851,7 @@ struct PlexHomeView: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(.white)
 
-                Text(authManager.connectionError ?? "Showing cached content")
+                Text(authManager.connectionError.map { HomeErrorPresentation.userFacingMessage(for: $0) } ?? "Showing cached content")
                     .font(.system(size: 16))
                     .foregroundStyle(.white.opacity(0.7))
             }
@@ -907,7 +909,7 @@ struct PlexHomeView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Personalized Recommendations Unavailable")
                         .font(.system(size: 20, weight: .semibold))
-                    Text(error)
+                    Text(HomeErrorPresentation.userFacingMessage(for: error))
                         .font(.system(size: 16))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)

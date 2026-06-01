@@ -9,6 +9,7 @@
 
 ### Security
 
+- Epic 2 PR7: Home error messages are now sanitized before display — a failed request's technical description (which can contain a token-bearing URL) can no longer appear in on-screen copy. Users see calm, plain-language errors; clean messages like "the connection appears to be offline" are preserved.
 - Epic 2 PR2: Top Shelf no longer shares Plex token-bearing image URLs with the system extension. Artwork is handed off as local files in the App Group; the extension reads local files only. Top Shelf items and deep links are unchanged.
 
 ### Internal (no user-facing change)
