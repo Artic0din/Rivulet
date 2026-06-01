@@ -127,3 +127,14 @@ migration of `playerDebugLog`/`print` → a structured, redaction-aware logger i
   extras, token-bearing URL exposure) are verified resolved; the broad `print()`
   migration it also describes remains open as `DEBT-E1-PR1-006`/`KF-E0-004`. Keep
   open for the hygiene portion only.
+
+---
+
+## 9. Follow-on — E4-PR2 telemetry contract (2026-06-02)
+
+The safe telemetry channel for new playback events now exists:
+`PlaybackTelemetry` (see `playback-telemetry-contract.md`) — typed events,
+allow-listed fields, no `URL`/dict in the public API, signpost (event-name only)
++ redacted Sentry breadcrumbs. New playback telemetry must go through it. This
+does **not** further change `E0-OBS-003` (the residual `print()` migration is
+unchanged); live event instrumentation is tracked under `DEBT-E4-PR2-001`.

@@ -199,6 +199,16 @@ These current surfaces are explicitly in scope for first-pass remediation:
 - Any unreviewed new crash field is a blocker.
 - Any unresolved ambiguity about whether a field contains a secret must be treated as a blocker until clarified.
 
+## Playback telemetry (Epic 4)
+
+Playback telemetry is governed by the typed `PlaybackTelemetry` contract
+(`Docs/modernization/epic-4/playback-telemetry-contract.md`,
+`Rivulet/Services/Plex/Playback/PlaybackTelemetry.swift`), which implements this
+policy for playback: a fixed allow-list of non-sensitive fields, no `URL`/dict in
+the public API, boundary redaction, and signpost-event-name-only + redacted
+Sentry breadcrumb sinks. New playback telemetry MUST be emitted through it, not
+through ad-hoc breadcrumbs/extras or `print`.
+
 ## Acceptance Criteria
 
 This policy is acceptable when:
