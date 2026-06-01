@@ -15,6 +15,7 @@
 
 ### Internal (no user-facing change)
 
+- ADO-02: the Home "Recently Added" rows now render landscape content cards (lower-left logo/title, Rating · Year · Runtime) instead of portrait posters, driven by the content-presentation policies. Other rows are unchanged; selection, preview, and focus behavior are preserved. Poster→landscape-on-focus remains available but not yet wired.
 - ADO-01B: retired the superseded standalone `EpisodeContentCard` view (and its unused model machinery). The production episode card remains the single, richer implementation; no parallel dead episode-card code remains. No user-facing change.
 - ADO-01: the live episode cards in TV show detail now source their "EPISODE n" label and a combined VoiceOver summary (episode, title, runtime, watched/progress) from the tested episode-presentation policy, making that policy live in the real detail screen. The existing (already Apple-TV-style) episode card layout and its play/info behavior are unchanged.
 - Epic 4 planning (no implementation): added the Playback Excellence architecture report and decomposition (AVKit-first policy framing, RPlayer fallback ladder, route decision matrix, resume/recovery/telemetry plan, risk register, proposed slices, stop/go recommendation). See `Docs/modernization/epic-4/`.

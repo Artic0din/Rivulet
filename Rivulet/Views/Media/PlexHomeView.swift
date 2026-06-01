@@ -769,6 +769,9 @@ struct PlexHomeView: View {
                                     serverURL: authManager.selectedServerURL ?? "",
                                     authToken: authManager.selectedServerToken ?? "",
                                     isContinueWatching: isContinueWatching,
+                                    // ADO-02: Recently Added rows render landscape cards;
+                                    // all other rows keep the poster card.
+                                    cardStyle: isRecentlyAddedHub(hub) ? .landscape : .poster,
                                     contextMenuSource: isContinueWatching ? .continueWatching : .other,
                                     onItemSelected: { item in selectItem(item) },
                                     onPlayItem: { item in
@@ -1160,6 +1163,9 @@ struct InfiniteContentRow: View {
     let serverURL: String
     let authToken: String
     var isContinueWatching: Bool = false
+    /// ADO-02: card visual style for this row. Default `.poster` preserves the
+    /// existing `MediaPosterCard`; `.landscape` renders `LandscapeContentCard`.
+    var cardStyle: ContentPresentationStyle = .poster
     var contextMenuSource: MediaItemContextSource = .other
     var onItemSelected: ((PlexMetadata) -> Void)?
     var onPlayItem: ((PlexMetadata) -> Void)?
@@ -1274,11 +1280,24 @@ struct InfiniteContentRow: View {
                                     authToken: authToken,
                                     isFocused: focusedItemId == focusId(for: item)
                                 )
-                            } else {
+                            } else if cardStyle == .poster {
                                 MediaPosterCard(
                                     item: item,
                                     serverURL: serverURL,
                                     authToken: authToken
+                                )
+                            } else {
+                                // ADO-02: landscape card visual; the wrapping
+                                // Button still owns selection/preview/focus.
+                                LandscapeContentCard(
+                                    model: PlexContentCardMapper.model(
+                                        from: item, serverURL: serverURL, authToken: authToken
+                                    ),
+                                    style: ContentPresentationPolicy.resolveStyle(
+                                        preferred: cardStyle,
+                                        hasLandscapeArtwork: PlexContentCardMapper.hasLandscapeArtwork(item)
+                                    ),
+                                    isFocused: focusedItemId == focusId(for: item)
                                 )
                             }
                         }

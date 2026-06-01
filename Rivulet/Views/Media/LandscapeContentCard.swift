@@ -74,15 +74,21 @@ private extension CardArtwork {
 
 // MARK: - Landscape content card
 
+/// Presentation-only landscape card visual. It is rendered as the *label* of a
+/// host row's focusable `Button` (which owns selection/preview/focus/context
+/// menu), exactly like `MediaPosterCard`/`ContinueWatchingCard` — so this view
+/// is NOT a button itself. Focus is passed in (`isFocused`) by the host row.
 struct LandscapeContentCard: View {
     let model: ContentCardModel
     /// Presentation style. `.posterExpandsToLandscape` shows the poster at rest
     /// and the landscape composition on focus.
     var style: ContentPresentationStyle = .landscape
+    /// Host-tracked focus (mirrors `ContinueWatchingCard`); drives the
+    /// poster→landscape reveal and the focus emphasis.
+    var isFocused: Bool = false
 
     @Environment(\.uiScale) private var scale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @FocusState private var isFocused: Bool
 
     private var width: CGFloat { ScaledDimensions.continueWatchingWidth * scale }
     private var height: CGFloat { ScaledDimensions.continueWatchingHeight * scale }
@@ -99,20 +105,14 @@ struct LandscapeContentCard: View {
     }
 
     var body: some View {
-        Button {
-            // Selection is handled by the host; this component is presentation.
-        } label: {
-            ZStack(alignment: .bottomLeading) {
-                artwork
-                if showsLandscape {
-                    overlay
-                }
+        ZStack(alignment: .bottomLeading) {
+            artwork
+            if showsLandscape {
+                overlay
             }
-            .frame(width: width, height: height)
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
-        .buttonStyle(CardButtonStyle())
-        .focused($isFocused)
+        .frame(width: width, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .scaleEffect(isFocused ? ContentDesignTokens.Scale.rowFocused : ContentDesignTokens.Scale.resting)
         .animation(
             PreviewMotionPolicy.animation(ContentDesignTokens.Motion.rowFocus, reduceMotion: reduceMotion),
