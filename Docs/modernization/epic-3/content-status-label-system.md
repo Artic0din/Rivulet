@@ -33,17 +33,32 @@ field exists, so future-facing labels and a trustworthy "All Episodes Available"
 are not derivable from Plex alone. `seriesIsComplete` is left nil today
 (conservative — never guessed).
 
-### TMDb (modelled today)
-`TMDBListItem`: `release_date`, `first_air_date`. `TMDBItemDetail`:
-`release_date`, `first_air_date`, `runtime`, `genres`, `cast`. **That is all.**
+### TMDb (CORRECTED 2026-06-01 against the TMDb OpenAPI spec)
 
-Missing (NOT fetched/modelled) — the future-facing gap:
-- `status` (e.g. Returning Series / Ended / In Production)
-- `next_episode_to_air` (date + season/episode)
-- `last_episode_to_air`
-- `in_production`
-- per-season `air_date`, per-episode `air_date`
-- `number_of_seasons` / `number_of_episodes`
+Earlier this doc implied the future-facing fields were unavailable / a large lift.
+That was wrong. Verified against `tmdb-api.json`:
+
+- **`GET /3/tv/{series_id}`** (the standard TV *detail* endpoint) returns, in its
+  base payload: `status`, `in_production`, `first_air_date`, `last_air_date`,
+  `next_episode_to_air` (incl. `air_date`, `season_number`, `episode_number`),
+  `last_episode_to_air`, `number_of_seasons`, `number_of_episodes`, `type`,
+  `episode_run_time`, `networks`, and `seasons[]` with
+  `{ air_date, episode_count, season_number }`.
+- **`GET /3/movie/{movie_id}`** returns `status`, `release_date`, `runtime`.
+- **`GET /3/tv/{series_id}/season/{n}`** returns `episodes[]` with `air_date`,
+  `episode_number`, `season_number` (per-episode dates, if ever needed).
+
+So **every future-facing label is backed by TMDb's standard detail endpoints** —
+no new endpoint, no `append_to_response`, no extra round-trip.
+
+**What the app models today (the real, smaller gap):** the app already fetches a
+per-item detail via its proxy (`tmdb/details/{id}` → `TMDBDiscoverService.fetchDetail`)
+and decodes it into `TMDBItemDetail`, which currently keeps only `title`,
+`overview`, poster/backdrop, `release_date`/`first_air_date`, `runtime`, `genres`,
+`cast`. The future-facing fields are simply **not decoded** (and `fetchDetail`
+re-constructs `TMDBItemDetail` field-by-field, so new fields must be added there
+too). The proxy returns TMDb's detail JSON, so — assuming it is a passthrough —
+the fields are already in the response body and the work is **decode/model-only**.
 
 ### Implementable now vs. needs TMDb
 | Label | Backed now? | Source |
@@ -100,19 +115,30 @@ From the supplied screenshots — analysed for *category*, not copied:
   past-facing tag alone ("Recently Added") does not deliver that, which is why
   the TMDb expansion (future dates) is the real unlock.
 
-## 5. Future metadata requirements (TMDb expansion)
+## 5. Future metadata requirements (TMDb decode expansion — CORRECTED)
 
-To light up the future-facing labels, extend `TMDBItemDetail` (and the
-`/tv/{id}` / `/movie/{id}` fetch in `TMDBClient`) with:
-- `status: String`
-- `in_production: Bool`
-- `next_episode_to_air: { air_date, season_number, episode_number }`
-- `last_episode_to_air: { air_date }`
-- `number_of_seasons`, `seasons[].air_date`
+To light up the future-facing labels, expand decoding of the **already-fetched**
+`tmdb/details/{id}` payload (no new endpoint, no extra round-trip):
 
-No new endpoint is required — these are fields on the existing detail endpoints,
-so it is a model/decoding expansion, not a new provider call pattern. Tracked as
-**DEBT-E3-ADO03-001**.
+1. Add to `TMDBItemDetail` (+ `CodingKeys`, both inits, and the field-by-field
+   rebuild in `TMDBDiscoverService.fetchDetail`):
+   - `status: String?`, `inProduction: Bool?`
+   - `firstAirDate` (already a coding key; surface it), `lastAirDate: String?`
+   - `nextEpisodeToAir: { airDate, seasonNumber, episodeNumber }?`
+   - `lastEpisodeToAir: { airDate }?`
+   - `numberOfSeasons: Int?`, `seasons: [{ airDate, episodeCount, seasonNumber }]?`
+2. Map them through `TMDBMediaMapper.detail` → `MediaItemDetail` (new optional
+   fields) so the hero/detail view can build a `ContentStatusInput`:
+   - `newSeason(date)` ← future-dated `seasons[].air_date`
+   - `returns(date)` / `premieres(date)` ← `next_episode_to_air.air_date` (+ `status`)
+   - `allEpisodesAvailable` ← `status == "Ended"` / `in_production == false`
+   - `comingSoon(date)` ← movie `release_date` / show `first_air_date` in the future
+3. **Verify the proxy passes these fields through.** The app reads
+   `tmdb/details/{id}` from a backend proxy; if that proxy projects a subset, add
+   the fields to its projection. (If it is a raw passthrough, step 1 alone
+   suffices.) This is the only possible non-app touch and is small.
+
+Effort: **low–medium, decode/model-only.** Tracked as **DEBT-E3-ADO03-001**.
 
 ## 6. Live adoption status
 
