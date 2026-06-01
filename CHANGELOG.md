@@ -13,6 +13,7 @@
 
 ### Internal (no user-facing change)
 
+- Epic 2 PR6: top-level navigation rules extracted into a deterministic, unit-tested `SidebarNavigationPolicy` (tab-change blocking during nested navigation, profile-switcher routing, and Settings/Discover fallback to Home). Behavior is unchanged; navigation is now provably deterministic. `SidebarTab` is now `nonisolated`, removing a main-actor-isolation warning. No visual change.
 - Epic 2 PR3: deterministic, stale-safe Home focus restoration (`FocusRestorationPolicy` + hardened `FocusMemory`); focus is no longer stranded on items removed by a refresh. No visual change.
 - Epic 2 PR1: shared home render-state model (`RenderState`/`RenderStateResolver`) and reusable `ContentStateView` surface replacing inline Home loading/empty/error views (visually identical).
 - Epic 2 PR1: first-party `os_signpost` performance harness (`HomePerformanceTracer`) for launch→home, render-state, and hero-preparation timings (Epic 0 PERF budgets).
