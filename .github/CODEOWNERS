@@ -1,0 +1,36 @@
+# Default owner
+* @Artic0din
+
+# Repository governance and CI
+/.github/ @Artic0din
+/AGENTS.md @Artic0din
+/Docs/modernization/ @Artic0din
+/Docs/adr/ @Artic0din
+
+# Xcode project, signing-adjacent configuration, and privacy manifests
+/Rivulet.xcodeproj/ @Artic0din
+/Rivulet/PrivacyInfo.xcprivacy @Artic0din
+/TopShelfExtension/PrivacyInfo.xcprivacy @Artic0din
+/Rivulet/Rivulet.entitlements @Artic0din
+/TopShelfExtension/TopShelfExtension.entitlements @Artic0din
+
+# Secrets and observability configuration surfaces
+/Rivulet/Config/Secrets.swift.template @Artic0din
+/Rivulet/RivuletApp.swift @Artic0din
+/Rivulet/Services/Security/ @Artic0din
+
+# Plex platform, auth, provider, and network boundaries
+/Rivulet/Services/Plex/ @Artic0din
+/Rivulet/Services/MediaProvider/ @Artic0din
+/Rivulet/Services/DeepLinkHandler.swift @Artic0din
+
+# Playback, focus, and Apple TV-specific runtime surfaces
+/Rivulet/Services/Plex/Playback/ @Artic0din
+/Rivulet/Views/Player/ @Artic0din
+/Rivulet/Services/Focus/ @Artic0din
+/Rivulet/Views/TVNavigation/ @Artic0din
+
+# Top Shelf extension and shared payloads
+/TopShelfExtension/ @Artic0din
+/Rivulet/Services/Cache/TopShelfCache.swift @Artic0din
+/Rivulet/Models/Shared/TopShelfItem.swift @Artic0din

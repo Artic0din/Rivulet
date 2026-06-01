@@ -1,4 +1,7 @@
-name: Claude Code
+name: Claude Code On Demand
+
+# Claude Code is the implementation agent for Epic 2 onward, but this workflow
+# is on-demand only. It is not a required review or merge gate.
 
 on:
   issue_comment:
@@ -47,4 +50,3 @@ jobs:
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
           # claude_args: '--allowed-tools Bash(gh pr *)'
-

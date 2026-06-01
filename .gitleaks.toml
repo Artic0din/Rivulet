@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Historical Plex XML fixture tagKey identifiers are metadata IDs, not secrets"
+paths = [
+  '''Docs/interstellar\.xml''',
+]
+regexTarget = "line"
+regexes = [
+  '''tagKey="[A-Za-z0-9]+"''',
+]

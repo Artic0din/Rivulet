@@ -1,0 +1,193 @@
+name: PR Governance Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  governance:
+    name: Governance validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate approved review model
+        run: |
+          set -euo pipefail
+
+          test -f AGENTS.md
+          test -f .github/pull_request_template.md
+          test -f .github/CODEOWNERS
+          test -f Docs/modernization/pr-review-setup.md
+          test -f Docs/modernization/release-checklist.md
+
+          test ! -f .github/workflows/codex-pr-review.yml
+          test ! -f .github/workflows/claude-code-review.yml
+
+          if grep -RInE "^[[:space:]]*pull_request_target:" .github/workflows; then
+            echo "pull_request_target is not allowed for this repo."
+            exit 1
+          fi
+
+          if grep -RFi \
+            -e "Codex review is required" \
+            -e "required Codex review" \
+            -e "Codex is a merge authority" \
+            -e "Greptile is required" \
+            -e "Sentry Seer is required" \
+            AGENTS.md .github/pull_request_template.md Docs/modernization/pr-review-setup.md Docs/modernization/release-checklist.md; then
+            echo "AI review must remain advisory and non-required."
+            exit 1
+          fi
+
+      - name: Validate PR template Markdown fences
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path(".github/pull_request_template.md")
+          text = path.read_text()
+          fence_count = text.count("```")
+          if fence_count % 2:
+              raise SystemExit(f"{path} has an unclosed Markdown code fence")
+
+          required_sections = [
+              "## Validation",
+              "Commands run:",
+              "## Security And Privacy",
+              "## Playback / Apple TV Validation",
+              "Device validation notes:",
+              "## AI Review",
+              "## Merge",
+          ]
+          missing = [section for section in required_sections if section not in text]
+          if missing:
+              raise SystemExit(f"{path} missing required sections: {missing}")
+          PY
+
+      - name: Validate required governance artifacts
+        run: |
+          set -euo pipefail
+          required=(
+            "Docs/modernization/epic-0/foundation-charter.md"
+            "Docs/modernization/epic-0/gate-matrix.md"
+            "Docs/modernization/epic-0/evidence-register.md"
+            "Docs/modernization/epic-0/debt-register.md"
+            "Docs/modernization/epic-0/regression-matrix.md"
+            "Docs/modernization/epic-0/privacy-disclosure-matrix.md"
+            "Docs/modernization/epic-0/security-network-surface-inventory.csv"
+            "Docs/adr/README.md"
+          )
+
+          for file in "${required[@]}"; do
+            test -f "$file" || {
+              echo "Missing required governance artifact: $file"
+              exit 1
+            }
+          done
+
+  csv:
+    name: CSV validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate endpoint inventory CSV
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv
+          from pathlib import Path
+
+          path = Path("Docs/modernization/epic-0/security-network-surface-inventory.csv")
+          required_headers = {
+              "surface_id",
+              "area",
+              "host",
+              "endpoint_family",
+              "endpoint_class",
+              "auth_mechanism",
+              "token_carrier",
+              "adapter_owner",
+              "retirement_or_containment_decision",
+              "risk_level",
+              "affected_epics",
+              "evidence_id",
+              "owner",
+              "status",
+              "notes",
+          }
+
+          with path.open(newline="") as handle:
+              reader = csv.DictReader(handle)
+              missing = required_headers.difference(reader.fieldnames or [])
+              if missing:
+                  raise SystemExit(f"{path} missing required headers: {sorted(missing)}")
+
+              rows = list(reader)
+
+          if not rows:
+              raise SystemExit(f"{path} must contain at least one surface row")
+
+          for index, row in enumerate(rows, start=2):
+              empty = [field for field in required_headers if not (row.get(field) or "").strip()]
+              if empty:
+                  raise SystemExit(f"{path}:{index} has empty required fields: {sorted(empty)}")
+
+              if not row["surface_id"].startswith("NET-"):
+                  raise SystemExit(f"{path}:{index} surface_id must be stable NET-* format")
+          PY
+
+  privacy:
+    name: Privacy manifest validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate privacy manifests
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+
+          required = [
+              Path("Rivulet/PrivacyInfo.xcprivacy"),
+              Path("TopShelfExtension/PrivacyInfo.xcprivacy"),
+          ]
+
+          for path in required:
+              if not path.exists():
+                  raise SystemExit(f"Missing privacy manifest: {path}")
+
+              with path.open("rb") as handle:
+                  data = plistlib.load(handle)
+
+              for key in [
+                  "NSPrivacyTracking",
+                  "NSPrivacyTrackingDomains",
+                  "NSPrivacyAccessedAPITypes",
+                  "NSPrivacyCollectedDataTypes",
+              ]:
+                  if key not in data:
+                      raise SystemExit(f"{path} missing required key {key}")
+
+              if data["NSPrivacyTracking"] is not False:
+                  raise SystemExit(f"{path} must declare NSPrivacyTracking=false")
+          PY

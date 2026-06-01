@@ -1,0 +1,81 @@
+name: tvOS CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Rivulet
+    # Pin runner image selection for determinism.
+    # This does not guarantee that the hosted image includes the required Xcode/tvOS 26 runtime.
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache SwiftPM and Xcode package artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData/SourcePackages
+          key: ${{ runner.os }}-xcode-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-spm-
+
+      - name: Prepare CI secrets placeholder
+        run: |
+          set -euo pipefail
+          cp Rivulet/Config/Secrets.swift.template Rivulet/Config/Secrets.swift
+
+      - name: Build for tvOS simulator
+        run: |
+          set -euo pipefail
+          xcodebuild -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV,OS=latest' build
+
+  targeted-tests:
+    name: Targeted Rivulet tests
+    needs: build
+    # Keep this pinned with the build job.
+    # This job remains blocked if the hosted image lacks the required Xcode/tvOS 26 runtime.
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache SwiftPM and Xcode package artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData/SourcePackages
+          key: ${{ runner.os }}-xcode-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-spm-
+
+      - name: Prepare CI secrets placeholder
+        run: |
+          set -euo pipefail
+          cp Rivulet/Config/Secrets.swift.template Rivulet/Config/Secrets.swift
+
+      - name: Run targeted platform tests
+        run: |
+          set -euo pipefail
+          xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV,OS=latest' \
+            -only-testing:RivuletTests/CredentialRegistryTests \
+            -only-testing:RivuletTests/SensitiveDataRedactorTests \
+            -only-testing:RivuletTests/PlexAuthManagerTests \
+            -only-testing:RivuletTests/PlexNetworkManagerURLTests \
+            -only-testing:RivuletTests/PlexWatchlistServiceTests
