@@ -1339,6 +1339,19 @@ AVPlayer-path fallback decision source. Behaviour preserved.
 | E4-PR5C-TEST-001 | Testing | 2026-06-02 | Epic 4 owner | Updated `PlaybackRoutingPolicyTests` (corrected fallback ladder: AVKit→HLS-once, RPlayer→noFallback, one-shot/no-loop) + `PlaybackInterruptionRecoveryPolicyTests` (corrected fatal delegation) + `PlaybackPolicyIntegrationTests` (AVKit gate ⇔ legacy gate across family×hls×attempted, RPlayer never falls back, one-shot, `routeFellBack` secret-free). Ran with Telemetry/Observability/ContentRouterPlaybackPlan/PlexProviderBoundary | `xcodebuild … test` → ** TEST SUCCEEDED ** | Gate Satisfying | Pending | Parity proven |
 | E4-PR5C-BUILD-001 | Build | 2026-06-02 | Epic 4 owner | tvOS simulator build exit 0; `git diff --check` clean | `xcodebuild build` → ** BUILD SUCCEEDED ** | Reviewed | Pending | Pre-existing DEBT-E0-005 warnings only |
 
+## E4-DEVICE-GATE — Media Corpus & Device Readiness Pack (2026-06-03)
+
+Docs-only. Defines the mandatory media corpus + physical Apple TV validation
+plan + Go/No-Go criteria that gate E4-PR6. No code, no build required.
+
+| Evidence ID | Area | Date | Owner | Evidence | Source | Status | Reviewer | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| E4-GATE-CORPUS-001 | Validation Plan | 2026-06-03 | Epic 4 owner | Full corpus matrix: 16 video/HDR/container rows (incl. DV P5/P8.1/P7-MEL/P8.6, HLG, MPEG-2/VC-1/VP9/AV1, hi-bitrate 4K HTTP, MKV/MP4), 11 audio rows (AAC→FLAC incl. Atmos/TrueHD/DTS-HD/DTS:X), 8 subtitle rows, 7 content-type rows — each with before/after route, fallback, sub/audio/HDR expectations, required device, pass/fail field | `e4-device-corpus-readiness-pack.md` §1 | Reviewed | Pending | Critical rows flagged for Go gate |
+| E4-GATE-INVENTORY-001 | Validation Plan | 2026-06-03 | Epic 4 owner | Library-inventory checklist (no file sharing): how to read codec/audio/subtitle/DV-profile/HDR-vs-HLG in Plex + live direct-play-vs-transcode check via server Now Playing | `e4-device-corpus-readiness-pack.md` §2 | Reviewed | Pending | Ryan action |
+| E4-GATE-DEVICE-001 | Environment | 2026-06-03 | Epic 4 owner | Required/recommended/optional device setup (Apple TV 4K, HDR/DV display, LAN+server reachability, Xcode deploy, Atmos path, AirPlay) | `e4-device-corpus-readiness-pack.md` §3 | Reviewed | Pending | Ryan environment |
+| E4-GATE-PROCEDURE-001 | Validation Plan | 2026-06-03 | Epic 4 owner | 16-step per-sample procedure (launch→route verify→DP/DS/transcode→seek→pause/resume→bg/fg→relaunch resume→sub/audio/chapter→trailer→post-play→fallback→error→stop→continue-watching) + telemetry-safe check | `e4-device-corpus-readiness-pack.md` §4 | Reviewed | Pending | Compared vs Plex Now Playing |
+| E4-GATE-GONOGO-001 | Gate | 2026-06-03 | Epic 4 owner | Explicit 8-point E4-PR6 Go/No-Go: corpus per critical row, device, HDR path, ≥1 advanced-audio (or waiver), subtitle samples, rollback plan, telemetry-safe, documented fallback ladder | `e4-device-corpus-readiness-pack.md` §5 | Gate Satisfying | Pending | Blocks E4-PR6 entry |
+
 ## Apple AVKit Playback Reference Audit (2026-06-02)
 
 Audit/docs only — no code change. Public APIs/HIG; 4 Apple AVKit pages verified
