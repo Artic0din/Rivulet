@@ -210,26 +210,38 @@ nonisolated struct FallbackInput: Sendable, Equatable {
 }
 
 nonisolated enum PlaybackFallbackPolicy {
-    /// Deterministic, loop-free fallback decision mirroring current behaviour:
-    /// an RPlayer (rivulet) fatal falls back to HLS exactly once; once that
-    /// one-shot is used (or we are already on HLS, or no HLS route exists) it
-    /// stops with an error. The AVKit path has no automatic route fallback
-    /// today (user-initiated retry only). There is never more than one
-    /// fallback hop, so no retry storm / infinite loop is possible.
+    /// Deterministic, loop-free fallback decision — a faithful mirror of the
+    /// live behaviour as it actually exists today (corrected in E4-PR5C after
+    /// integration revealed the player branches were inverted):
+    ///
+    /// - **AVKit (AVPlayer) path** — `UniversalPlayerViewModel.startWithFallback`
+    ///   and the `AVPlayerItem` failure observer reload the stream as Plex HLS
+    ///   exactly once on a direct/remux startup or item failure, gated by
+    ///   `planHasHLSFallback` (HLS route available) and the
+    ///   `hasAttemptedRivuletHLSFallback` one-shot guard. Once that one-shot is
+    ///   spent, no HLS route exists, or we are already on HLS, it stops with a
+    ///   calm error.
+    /// - **RPlayer (rivulet) path** — `startRivuletPlayback` / `handlePipelineError`
+    ///   send `.failed` straight away on any load/runtime fatal; there is **no**
+    ///   automatic route fallback (the user can retry). So rivulet → `.noFallback`.
+    ///
+    /// There is never more than one fallback hop, so no retry storm / infinite
+    /// loop is possible.
     static func decide(_ input: FallbackInput) -> PlaybackFallbackDecision {
-        // Already on the terminal route — nowhere safe to fall back to.
-        if input.attemptedFamily == .hls { return .stopWithError }
-        // One-shot fallback already spent, or no HLS available.
-        if input.hlsFallbackAlreadyAttempted || !input.hlsRouteAvailable {
-            return .stopWithError
-        }
         switch input.player {
         case .rivulet:
-            // RPlayer demux/decode/runtime/unsupported/network fatal → HLS once.
-            return .fallback(.hls)
-        case .avKit:
-            // No automatic AVKit route fallback in current behaviour.
+            // RPlayer failures are terminal today — no automatic route fallback.
+            // (DirectPlay→HLS is NOT auto-attempted; user-initiated retry only.)
             return .noFallback
+        case .avKit:
+            // Already on the terminal route — nowhere safe to fall back to.
+            if input.attemptedFamily == .hls { return .stopWithError }
+            // One-shot fallback already spent, or no HLS route available.
+            if input.hlsFallbackAlreadyAttempted || !input.hlsRouteAvailable {
+                return .stopWithError
+            }
+            // AVPlayer reloads as Plex HLS once on a direct/remux failure.
+            return .fallback(.hls)
         }
     }
 }

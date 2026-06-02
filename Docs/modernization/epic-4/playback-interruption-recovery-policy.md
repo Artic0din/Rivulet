@@ -161,3 +161,16 @@ across all phases.
   validation. Left in place; debt open.
 - **`stall` / `recovered` live emission** is deferred with the recovery wiring
   (it needs the live recovery seam to fire it), tracked with `DEBT-E4-PR2-001`.
+
+---
+
+## 10. Fatal-delegation correction (E4-PR5C, 2026-06-02)
+
+`decide(.fatalError)` delegates to `PlaybackFallbackPolicy`, whose player
+branches were **inverted** in the original model. After the E4-PR5C correction
+(see `playback-routing-policy.md`), the fatal outcomes this policy returns now
+match live behaviour: **AVKit** direct/remux fatal with an available, un-spent
+HLS route → `.fallbackRoute(.hls)` (else `.showPlaybackError`); **RPlayer** fatal
+→ `.showPlaybackError` (RPlayer has no automatic route fallback today). The
+policy remains unwired for interruptions; only the fatal *model* it delegates to
+changed. The PR5 fatal tests were updated to the corrected expectations.

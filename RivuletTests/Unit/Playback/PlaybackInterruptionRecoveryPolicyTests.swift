@@ -119,12 +119,15 @@ final class PlaybackInterruptionRecoveryPolicyTests: XCTestCase {
         XCTAssertEqual(Policy.decide(input(.userRetry, phase: .failed)), .retryPlayback)
     }
 
-    // MARK: - Fatal fallback (delegated to PlaybackFallbackPolicy, one-shot)
+    // MARK: - Fatal fallback (delegated to PlaybackFallbackPolicy)
+    //
+    // E4-PR5C corrected the live model: the AVPlayer (AVKit) path falls back to
+    // HLS once; the RPlayer (rivulet) path is terminal (no auto fallback).
 
-    func testRPlayerFatalFallsBackToHLSOnce() {
+    func testAVKitDirectFatalFallsBackToHLSOnce() {
         let decision = Policy.decide(input(
             .fatalError(.decode),
-            player: .rivulet,
+            player: .avKit,
             phase: .failed,
             attemptedFamily: .avPlayerDirect,
             hlsFallbackAlreadyAttempted: false
@@ -132,10 +135,10 @@ final class PlaybackInterruptionRecoveryPolicyTests: XCTestCase {
         XCTAssertEqual(decision, .fallbackRoute(.hls))
     }
 
-    func testRPlayerFatalAfterFallbackSpentShowsError() {
+    func testAVKitFatalAfterFallbackSpentShowsError() {
         let decision = Policy.decide(input(
             .fatalError(.decode),
-            player: .rivulet,
+            player: .avKit,
             phase: .failed,
             attemptedFamily: .hls,
             hlsFallbackAlreadyAttempted: true
@@ -143,10 +146,10 @@ final class PlaybackInterruptionRecoveryPolicyTests: XCTestCase {
         XCTAssertEqual(decision, .showPlaybackError)
     }
 
-    func testRPlayerFatalWithNoHLSRouteShowsError() {
+    func testAVKitFatalWithNoHLSRouteShowsError() {
         let decision = Policy.decide(input(
             .fatalError(.network),
-            player: .rivulet,
+            player: .avKit,
             phase: .failed,
             attemptedFamily: .avPlayerDirect,
             hlsRouteAvailable: false
@@ -154,21 +157,24 @@ final class PlaybackInterruptionRecoveryPolicyTests: XCTestCase {
         XCTAssertEqual(decision, .showPlaybackError)
     }
 
-    func testAVKitFatalHasNoAutomaticFallbackAndShowsError() {
-        let decision = Policy.decide(input(
-            .fatalError(.decode),
-            player: .avKit,
-            phase: .failed,
-            attemptedFamily: .avPlayerDirect
-        ))
-        // AVKit path: no automatic route fallback today → surface error (user retry).
-        XCTAssertEqual(decision, .showPlaybackError)
+    func testRPlayerFatalIsTerminalNoAutoFallback() {
+        // RPlayer failures surface a calm error and rely on user retry — never
+        // an automatic route fallback, regardless of HLS availability.
+        for family in [RouteFamily.avPlayerDirect, .localRemux, .hls] {
+            let decision = Policy.decide(input(
+                .fatalError(.decode),
+                player: .rivulet,
+                phase: .failed,
+                attemptedFamily: family
+            ))
+            XCTAssertEqual(decision, .showPlaybackError, "family=\(family)")
+        }
     }
 
-    func testFatalAlreadyOnHLSShowsError() {
+    func testAVKitFatalAlreadyOnHLSShowsError() {
         let decision = Policy.decide(input(
             .fatalError(.network),
-            player: .rivulet,
+            player: .avKit,
             phase: .failed,
             attemptedFamily: .hls
         ))

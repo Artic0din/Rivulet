@@ -1492,9 +1492,50 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
     }
 
+    /// E4-PR5C: map a plan's primary route to the policy's route family.
+    private func planAttemptedFamily(_ plan: PlaybackPlan?) -> RouteFamily {
+        switch plan?.primary {
+        case .avPlayerDirect: return .avPlayerDirect
+        case .localRemux:     return .localRemux
+        case .hls, .none:     return .hls
+        }
+    }
+
+    /// E4-PR5C: map a direct-play failure kind to the safe telemetry category.
+    private func telemetryFailureCategory(_ kind: DirectPlayFailureKind) -> PlaybackTelemetry.FailureCategory {
+        switch kind {
+        case .unsupportedCodec: return .unsupported
+        case .demuxInit:        return .demux
+        case .decodeInit:       return .decode
+        case .network:          return .network
+        case .runtimeFatal:     return .unknown
+        case .unknown:          return .unknown
+        }
+    }
+
+    /// E4-PR5C: the AVPlayer-path fallback decision, sourced from the corrected
+    /// `PlaybackFallbackPolicy`. This is the single decision source for "should
+    /// the AVPlayer path reload as Plex HLS?"; the concurrency/dedup mechanics
+    /// (`isAttempting`, `streamURL`, current-vs-prebuilt-fallback) stay at the
+    /// call sites. With `player: .avKit` the decision is `.fallback(.hls)` iff
+    /// an HLS route is available, it has not been attempted, and we are not
+    /// already on HLS — identical to the prior `planHasHLSFallback && !attempted`
+    /// gate (verified by PlaybackPolicyIntegrationTests).
+    private func avPlayerFallbackDecision(plan: PlaybackPlan?) -> PlaybackFallbackDecision {
+        PlaybackFallbackPolicy.decide(
+            FallbackInput(
+                player: .avKit,
+                attemptedFamily: planAttemptedFamily(plan),
+                failure: .unknown,
+                hlsFallbackAlreadyAttempted: hasAttemptedRivuletHLSFallback,
+                hlsRouteAvailable: planHasHLSFallback(plan)
+            )
+        )
+    }
+
     private func shouldAttemptRivuletFallbackOnItemFailure() -> Bool {
-        guard planHasHLSFallback(playbackPlan) else { return false }
-        guard !hasAttemptedRivuletHLSFallback, !isAttemptingRivuletHLSFallback else { return false }
+        guard case .fallback = avPlayerFallbackDecision(plan: playbackPlan) else { return false }
+        guard !isAttemptingRivuletHLSFallback else { return false }
         guard let current = streamURL else { return false }
         if let fallback = rivuletFallbackURL, current == fallback {
             return false
@@ -1568,7 +1609,11 @@ final class UniversalPlayerViewModel: ObservableObject {
             do {
                 try loadAVPlayer(url: directURL, headers: directHeaders)
             } catch {
-                guard planHasHLSFallback(plan) else { throw error }
+                // E4-PR5C: PlaybackFallbackPolicy is the decision source for the
+                // AVPlayer-path HLS fallback. `.fallback` iff an HLS route is
+                // available (identical to the old `planHasHLSFallback` gate at
+                // startup, where the one-shot has not yet been spent).
+                guard case .fallback = avPlayerFallbackDecision(plan: plan) else { throw error }
                 let kind = classifyDirectPlayFailure(error)
                 try await attemptRivuletHLSFallback(
                     resumeTime: startTime ?? 0,
@@ -1598,7 +1643,11 @@ final class UniversalPlayerViewModel: ObservableObject {
                 }
                 print("[Remux] Ready in \(readyMs)ms")
             } catch {
-                guard planHasHLSFallback(plan) else { throw error }
+                // E4-PR5C: PlaybackFallbackPolicy is the decision source for the
+                // AVPlayer-path HLS fallback. `.fallback` iff an HLS route is
+                // available (identical to the old `planHasHLSFallback` gate at
+                // startup, where the one-shot has not yet been spent).
+                guard case .fallback = avPlayerFallbackDecision(plan: plan) else { throw error }
                 let kind = classifyDirectPlayFailure(error)
                 try await attemptRivuletHLSFallback(
                     resumeTime: startTime ?? 0,
@@ -2082,6 +2131,26 @@ final class UniversalPlayerViewModel: ObservableObject {
         defer { isAttemptingRivuletHLSFallback = false }
 
         print("[Fallback] Failed (\(failureKind.rawValue), reason=\(reason)) → HLS")
+
+        // E4-PR5C: this is the live AVPlayer-path one-shot HLS fallback firing —
+        // emit a safe `routeFellBack` (anonymised route names + typed failure
+        // category; no URL/token expressible). `from` is the route we are
+        // leaving (AVKit direct/remux); `to` is HLS.
+        let fromRoute: PlaybackTelemetry.RouteName = {
+            switch planAttemptedFamily(playbackPlan) {
+            case .avPlayerDirect: return .avPlayerDirect
+            case .localRemux:     return .localRemux
+            case .hls:            return .hls
+            }
+        }()
+        PlaybackTelemetry.emit(
+            .routeFellBack(
+                playbackSafeContext(),
+                from: fromRoute,
+                to: .hls,
+                category: telemetryFailureCategory(failureKind)
+            )
+        )
 
         let fallback: (url: URL, headers: [String: String], sessionId: String?)?
         if resumeTime <= 0.5, let prebuiltURL = rivuletFallbackURL, !rivuletFallbackHeaders.isEmpty {

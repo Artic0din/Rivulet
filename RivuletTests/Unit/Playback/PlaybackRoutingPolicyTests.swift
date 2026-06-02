@@ -115,60 +115,68 @@ final class PlaybackRoutingPolicyTests: XCTestCase {
     }
 
     // MARK: - Fallback ladder (deterministic, loop-free)
+    //
+    // E4-PR5C corrected the player branches to match live behaviour: the
+    // AVPlayer (AVKit) path falls back to HLS once; the RPlayer (rivulet) path
+    // has no automatic route fallback (terminal `.failed`, user-retry only).
 
-    func testRPlayerDirectFatalFallsBackToHLSOnce() {
+    func testAVKitDirectFatalFallsBackToHLSOnce() {
         let decision = PlaybackFallbackPolicy.decide(
-            FallbackInput(player: .rivulet, attemptedFamily: .avPlayerDirect, failure: .decode)
+            FallbackInput(player: .avKit, attemptedFamily: .avPlayerDirect, failure: .decode)
         )
         XCTAssertEqual(decision, .fallback(.hls))
     }
 
-    func testRPlayerLocalRemuxFatalFallsBackToHLSOnce() {
+    func testAVKitLocalRemuxFatalFallsBackToHLSOnce() {
         let decision = PlaybackFallbackPolicy.decide(
-            FallbackInput(player: .rivulet, attemptedFamily: .localRemux, failure: .demux)
+            FallbackInput(player: .avKit, attemptedFamily: .localRemux, failure: .demux)
         )
         XCTAssertEqual(decision, .fallback(.hls))
     }
 
-    func testSecondFallbackIsStopped_NoLoop() {
+    func testAVKitSecondFallbackIsStopped_NoLoop() {
         let decision = PlaybackFallbackPolicy.decide(
-            FallbackInput(player: .rivulet, attemptedFamily: .avPlayerDirect, failure: .unknown,
+            FallbackInput(player: .avKit, attemptedFamily: .avPlayerDirect, failure: .unknown,
                           hlsFallbackAlreadyAttempted: true)
         )
         XCTAssertEqual(decision, .stopWithError)
     }
 
-    func testFailureOnHLSStops() {
+    func testAVKitFailureOnHLSStops() {
         let decision = PlaybackFallbackPolicy.decide(
-            FallbackInput(player: .rivulet, attemptedFamily: .hls, failure: .network)
+            FallbackInput(player: .avKit, attemptedFamily: .hls, failure: .network)
         )
         XCTAssertEqual(decision, .stopWithError)
     }
 
-    func testNoHLSRouteAvailableStops() {
+    func testAVKitNoHLSRouteAvailableStops() {
         let decision = PlaybackFallbackPolicy.decide(
-            FallbackInput(player: .rivulet, attemptedFamily: .avPlayerDirect, failure: .decode,
+            FallbackInput(player: .avKit, attemptedFamily: .avPlayerDirect, failure: .decode,
                           hlsRouteAvailable: false)
         )
         XCTAssertEqual(decision, .stopWithError)
     }
 
-    func testAVKitHasNoAutomaticRouteFallback() {
-        let decision = PlaybackFallbackPolicy.decide(
-            FallbackInput(player: .avKit, attemptedFamily: .avPlayerDirect, failure: .decode)
-        )
-        XCTAssertEqual(decision, .noFallback)
+    func testRPlayerHasNoAutomaticRouteFallback() {
+        // RPlayer failures are terminal today — no auto fallback, regardless of
+        // HLS availability or attempt state.
+        for family in [RouteFamily.avPlayerDirect, .localRemux, .hls] {
+            let decision = PlaybackFallbackPolicy.decide(
+                FallbackInput(player: .rivulet, attemptedFamily: family, failure: .decode)
+            )
+            XCTAssertEqual(decision, .noFallback, "family=\(family)")
+        }
     }
 
-    func testFallbackLadderTerminatesInTwoHops() {
-        // hop 1: rivulet direct → HLS
+    func testAVKitFallbackLadderTerminatesInTwoHops() {
+        // hop 1: avKit direct → HLS
         let first = PlaybackFallbackPolicy.decide(
-            FallbackInput(player: .rivulet, attemptedFamily: .avPlayerDirect, failure: .decode)
+            FallbackInput(player: .avKit, attemptedFamily: .avPlayerDirect, failure: .decode)
         )
         XCTAssertEqual(first, .fallback(.hls))
         // hop 2: now on HLS (one-shot spent) → stop
         let second = PlaybackFallbackPolicy.decide(
-            FallbackInput(player: .rivulet, attemptedFamily: .hls, failure: .network,
+            FallbackInput(player: .avKit, attemptedFamily: .hls, failure: .network,
                           hlsFallbackAlreadyAttempted: true)
         )
         XCTAssertEqual(second, .stopWithError)

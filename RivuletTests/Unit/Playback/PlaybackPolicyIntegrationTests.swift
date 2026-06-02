@@ -206,4 +206,82 @@ final class PlaybackPolicyIntegrationTests: XCTestCase {
         XCTAssertFalse(joined.contains("10.0.0.1"))
         XCTAssertEqual(fields["route"], "rplayerDirectPlay")
     }
+
+    // MARK: - Fallback parity (E4-PR5C; UniversalPlayerViewModel AVPlayer path)
+
+    /// The AVPlayer-path gate `shouldAttemptRivuletFallbackOnItemFailure` /
+    /// `startWithFallback` now sources its decision from
+    /// `PlaybackFallbackPolicy.decide(player: .avKit, …)`. The decision must be
+    /// `.fallback` exactly when the old `planHasHLSFallback && !hasAttempted`
+    /// gate was true (for the non-HLS primaries the AVPlayer path runs on).
+    func testAVKitFallbackGateMatchesLegacyGate() {
+        for family in [RouteFamily.avPlayerDirect, .localRemux] {
+            for hlsAvailable in [false, true] {
+                for attempted in [false, true] {
+                    let decision = PlaybackFallbackPolicy.decide(
+                        FallbackInput(
+                            player: .avKit,
+                            attemptedFamily: family,
+                            failure: .unknown,
+                            hlsFallbackAlreadyAttempted: attempted,
+                            hlsRouteAvailable: hlsAvailable
+                        )
+                    )
+                    let wouldFallback: Bool = { if case .fallback = decision { return true } else { return false } }()
+                    let legacyGate = hlsAvailable && !attempted
+                    XCTAssertEqual(wouldFallback, legacyGate,
+                                   "family=\(family) hls=\(hlsAvailable) attempted=\(attempted)")
+                }
+            }
+        }
+    }
+
+    /// On an HLS primary the AVPlayer path never auto-falls-back (legacy:
+    /// `planHasHLSFallback` is false for HLS primaries → fallbacks empty).
+    func testAVKitOnHLSNeverFallsBack() {
+        let decision = PlaybackFallbackPolicy.decide(
+            FallbackInput(player: .avKit, attemptedFamily: .hls, failure: .network, hlsRouteAvailable: false)
+        )
+        XCTAssertEqual(decision, .stopWithError)
+    }
+
+    /// The RPlayer path is terminal — `startRivuletPlayback` / `handlePipelineError`
+    /// send `.failed` with no automatic route fallback.
+    func testRPlayerNeverAutoFallsBack() {
+        for family in [RouteFamily.avPlayerDirect, .localRemux, .hls] {
+            XCTAssertEqual(
+                PlaybackFallbackPolicy.decide(FallbackInput(player: .rivulet, attemptedFamily: family, failure: .decode)),
+                .noFallback, "family=\(family)"
+            )
+        }
+    }
+
+    /// One-shot: a second AVKit fallback (already attempted) stops with error — no loop.
+    func testAVKitFallbackIsOneShot() {
+        let first = PlaybackFallbackPolicy.decide(
+            FallbackInput(player: .avKit, attemptedFamily: .avPlayerDirect, failure: .decode)
+        )
+        XCTAssertEqual(first, .fallback(.hls))
+        let second = PlaybackFallbackPolicy.decide(
+            FallbackInput(player: .avKit, attemptedFamily: .hls, failure: .network, hlsFallbackAlreadyAttempted: true)
+        )
+        XCTAssertEqual(second, .stopWithError)
+    }
+
+    /// `routeFellBack` (emitted live in `attemptRivuletHLSFallback`) is secret-free.
+    func testRouteFellBackFieldsCarryNoSecret() {
+        let event = PlaybackTelemetry.Event.routeFellBack(
+            PlaybackTelemetry.SafeContext(mediaType: "movie", ratingKey: "9", codecFamily: "h264", containerFamily: "mp4"),
+            from: .avPlayerDirect,
+            to: .hls,
+            category: .decode
+        )
+        let fields = PlaybackTelemetry.fields(for: event)
+        let joined = fields.values.joined(separator: " ")
+        XCTAssertFalse(joined.lowercased().contains("http"))
+        XCTAssertFalse(joined.contains("://"))
+        XCTAssertEqual(fields["from"], "avPlayerDirect")
+        XCTAssertEqual(fields["to"], "hls")
+        XCTAssertEqual(fields["failure"], "decode")
+    }
 }

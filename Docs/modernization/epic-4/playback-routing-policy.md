@@ -135,11 +135,44 @@ over all four input combinations). No default flip.
   for it risks reasoning/route regressions in the constraint-heavy router. Left
   in place; debt open for this path.
 - **`PlaybackFallbackPolicy` wiring — BLOCKED by a model discrepancy discovered
-  during integration.** The live AVPlayer path (`startWithFallback` /
-  `attemptRivuletHLSFallback`) **does** fall back to HLS once on a direct/remux
-  startup or item failure, but `PlaybackFallbackPolicy.decide` currently returns
-  `.noFallback` for `player == .avKit`. Wiring it as-is would change behaviour
-  (suppress the AVPlayer→HLS fallback). The policy's player-discrimination must
-  be corrected first (fallback is keyed on `planHasHLSFallback` + one-shot guard,
-  not on the player) before it can be the live decision source. Tracked under
-  `DEBT-E4-PR3-001`; no wiring done here.
+  during integration.** *(Resolved in E4-PR5C — see below.)* The live AVPlayer
+  path (`startWithFallback` / `attemptRivuletHLSFallback`) **does** fall back to
+  HLS once on a direct/remux startup or item failure, but `PlaybackFallbackPolicy.decide`
+  returned `.noFallback` for `player == .avKit`. Wiring it as-is would have
+  changed behaviour.
+
+---
+
+## Fallback correction + wiring (E4-PR5C, 2026-06-02)
+
+**The `PlaybackFallbackPolicy` model was corrected** to match the live behaviour
+the integration audit established (the player branches were inverted):
+
+| Player | Live behaviour (audited) | Corrected `decide` |
+|--------|--------------------------|--------------------|
+| **AVKit** (AVPlayer) | `startWithFallback` + `AVPlayerItem`-failure observer reload as Plex HLS **once**, gated by `planHasHLSFallback` (HLS route present) + the `hasAttemptedRivuletHLSFallback` one-shot | non-HLS family + HLS available + not attempted → `.fallback(.hls)`; else `.stopWithError` |
+| **RPlayer** (rivulet) | `startRivuletPlayback` / `handlePipelineError` send `.failed` — **no** automatic route fallback (user-retry only) | always `.noFallback` |
+
+(The earlier E4-PR3 model had these the wrong way round — `rivulet→fallback`,
+`avKit→noFallback`. The audit found `RivuletPlayer` has no live DirectPlay→HLS
+auto-fallback; the `CLAUDE.md` note to the contrary is stale vs current code.)
+
+**Now wired (single decision source for the AVPlayer fallback):**
+
+- `UniversalPlayerViewModel.shouldAttemptRivuletFallbackOnItemFailure()` and both
+  `startWithFallback` startup-catch gates now consult
+  `PlaybackFallbackPolicy.decide(FallbackInput(player: .avKit, …))` via the
+  `avPlayerFallbackDecision(plan:)` helper. The concurrency/dedup mechanics
+  (`isAttempting`, `streamURL`, current-vs-prebuilt-fallback URL) stay at the
+  call sites. Behaviour is identical to the old `planHasHLSFallback && !hasAttempted`
+  gate — proven by `PlaybackPolicyIntegrationTests.testAVKitFallbackGateMatchesLegacyGate`
+  across `{family} × {hlsAvailable} × {attempted}`.
+- **Telemetry:** `routeFellBack` (anonymised from/to route names + typed failure
+  category; no URL/token) is now emitted live from `attemptRivuletHLSFallback`
+  when the one-shot fires. Reduces `DEBT-E4-PR2-001`.
+
+**Still deferred (`DEBT-E4-PR3-001`):** the route-family replacement in
+`ContentRouter.plan` (reasoning-string / URL-build coupling pinned by tests).
+
+`DEBT-E4-PR3-FALLBACK-001` is **closed** (model corrected, tests updated, AVPlayer
+fallback wired). RPlayer remains terminal-on-failure by design — no debt.
