@@ -114,3 +114,32 @@ Any actual routing change (E4-PR6) is gated by the media-validation corpus
 (`DEBT-E1-PR1-004`) and a physical Apple TV 4K + HDR + Atmos environment — DV/HDR
 dynamic-range, Atmos passthrough, and startup/rebuffer timing cannot be validated
 on the simulator. See `epic-4-readiness-review.md` §4–5.
+
+---
+
+## Live integration (E4-PR5B, 2026-06-02)
+
+**`PlaybackRoutingPolicy.player()` is now LIVE** as the single source for the
+player choice in `UniversalPlayerViewModel.startPlayback`: the historical
+`!useApplePlayer && !mustUseAVPlayer` rule is replaced by
+`PlaybackRoutingPolicy.player(RoutingInput(videoRequiresTranscode:, useApplePlayer:, avKitFirst: false))`.
+`avKitFirst` is passed `false`, so the runtime player selection is identical
+(verified by `PlaybackPolicyIntegrationTests.testPlayerSelectionMatchesLegacyRule`
+over all four input combinations). No default flip.
+
+**Deferred (still `DEBT-E4-PR3-001`):**
+
+- **Route-family replacement in `ContentRouter.plan`.** Not wired: `plan` owns
+  URL construction *and* the `reasoning` strings that `ContentRouterPlaybackPlanTests`
+  pin. `routeFamily` is a proven faithful mirror, but swapping the live branch
+  for it risks reasoning/route regressions in the constraint-heavy router. Left
+  in place; debt open for this path.
+- **`PlaybackFallbackPolicy` wiring — BLOCKED by a model discrepancy discovered
+  during integration.** The live AVPlayer path (`startWithFallback` /
+  `attemptRivuletHLSFallback`) **does** fall back to HLS once on a direct/remux
+  startup or item failure, but `PlaybackFallbackPolicy.decide` currently returns
+  `.noFallback` for `player == .avKit`. Wiring it as-is would change behaviour
+  (suppress the AVPlayer→HLS fallback). The policy's player-discrimination must
+  be corrected first (fallback is keyed on `planHasHLSFallback` + one-shot guard,
+  not on the player) before it can be the live decision source. Tracked under
+  `DEBT-E4-PR3-001`; no wiring done here.

@@ -115,3 +115,24 @@ slices that own those typed values, and avoids premature edits to the
 constraint-heavy playback files. The contract is ready for them to call.
 
 Adoption tracking: `DEBT-E4-PR2-001`.
+
+---
+
+## Live emission (E4-PR5B, 2026-06-02)
+
+**`routeSelected` is now emitted LIVE.** `UniversalPlayerViewModel.prepareStreamURL`
+calls `PlaybackTelemetry.emit(.routeSelected(SafeContext, route:, reason:))` once
+per playback start, after the route plan is computed. The `SafeContext` carries
+only non-sensitive descriptors (media type, rating key, lowercased video codec
+family, container family); the `route` is an anonymised `RouteName` derived from
+the primary route × selected player (RPlayer serves direct/remux via its
+DirectPlay pipeline → `rplayerDirectPlay`); the `reason` is the router's own
+reasoning token. A test feeds a token-bearing URL into the `reason` and asserts
+the emitted fields carry no `http`/`://`/host/token. This is the first live
+playback telemetry — it reduces `DEBT-E4-PR2-001` (the contract is now exercised
+end to end).
+
+**Still deferred:** `startup*`, `routeFellBack`, `rebuffer`, `stall`,
+`recovered` — these fire from seams not yet wired (fallback is blocked on the
+`PlaybackFallbackPolicy` model correction; recovery emission lands with the
+recovery wiring). Tracked `DEBT-E4-PR2-001` / `DEBT-E4-PR3-001` / `DEBT-E4-PR5-001`.

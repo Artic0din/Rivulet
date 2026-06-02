@@ -134,3 +134,30 @@ watchlist behaviour.
 Confirmed: no playback UX change, no route change, no player change, no
 AVKit-first flip, no subtitle/audio/chapter/post-play change, no project-setting
 change, no provider-boundary change. Pure extraction + tests + docs.
+
+---
+
+## 9. Live integration (E4-PR5B, 2026-06-02)
+
+**`decide(.appBackgrounded)` is now LIVE** in
+`UniversalPlayerViewModel.observeAppLifecycle`: the background observer's
+`playbackState == .playing` check is replaced by
+`PlaybackInterruptionRecoveryPolicy.decide(InterruptionInput(source: .appBackgrounded, …))`,
+pausing iff the result is `.pauseAwaitingUser`. The universal playback state is
+mapped to `PlaybackPhase` by a 1:1 helper (`.ready → .loading`), and since the
+background decision branches only on `.playing`, the runtime behaviour is
+identical — proven by `PlaybackPolicyIntegrationTests.testBackgroundPauseMatchesLegacyPlayingCheck`
+across all phases.
+
+**Deferred (still `DEBT-E4-PR5-001`, reduced):**
+
+- **Foreground handler** keeps its trivial flag-clear (the policy's
+  `pauseAwaitingUser` == "remain paused", which the handler already achieves by
+  not resuming); no behavioural wiring needed.
+- **RPlayer route-change / auto-flush / output-config recovery and the AirPlay
+  stereo-fallback → abandon ladder** stay in `RivuletPlayer`. These are
+  timing-sensitive, debounced, single-flight async paths; routing them through
+  the policy risks subtle regressions and must be done with on-device AirPlay
+  validation. Left in place; debt open.
+- **`stall` / `recovered` live emission** is deferred with the recovery wiring
+  (it needs the live recovery seam to fire it), tracked with `DEBT-E4-PR2-001`.

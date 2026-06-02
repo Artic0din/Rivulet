@@ -618,7 +618,18 @@ final class UniversalPlayerViewModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            if self.playbackState == .playing {
+            // E4-PR5B: PlaybackInterruptionRecoveryPolicy decides the background
+            // action. With phase==.playing it returns `.pauseAwaitingUser`
+            // (pause + hold for manual resume) — identical to the historical
+            // `playbackState == .playing` check; any other phase → `.noAction`.
+            let decision = PlaybackInterruptionRecoveryPolicy.decide(
+                InterruptionInput(
+                    source: .appBackgrounded,
+                    player: self.player != nil ? .avKit : .rivulet,
+                    phase: Self.recoveryPhase(for: self.playbackState)
+                )
+            )
+            if decision == .pauseAwaitingUser {
                 self.pausedDueToAppInactive = true
                 print("[Remux] App entering background — pausing")
                 Task { @MainActor in
@@ -666,6 +677,11 @@ final class UniversalPlayerViewModel: ObservableObject {
         rivuletFallbackURL = nil
         rivuletFallbackHeaders = [:]
 
+        // E4-PR5B: live `routeSelected` emission through the safe telemetry
+        // contract (E4-PR2). The route name is anonymised (never a URL); the
+        // reason is the router's own reasoning token, scrubbed at the sink.
+        emitRouteSelectedTelemetry(plan: plan, useApplePlayer: useApplePlayer)
+
         switch plan.primary {
         case .avPlayerDirect(let url, let headers):
             // AVPlayer direct — use the URL from the plan
@@ -708,6 +724,61 @@ final class UniversalPlayerViewModel: ObservableObject {
                 plexSessionId = result.sessionId
             }
         }
+    }
+
+    /// E4-PR5B: map the universal playback state to the policy's coarse phase.
+    /// `.ready` (a transient pre-playing state) maps to `.loading`; the only
+    /// phase the background decision actually branches on is `.playing`.
+    private static func recoveryPhase(for state: UniversalPlaybackState) -> PlaybackPhase {
+        switch state {
+        case .idle:      return .idle
+        case .loading:   return .loading
+        case .ready:     return .loading
+        case .playing:   return .playing
+        case .paused:    return .paused
+        case .buffering: return .buffering
+        case .ended:     return .ended
+        case .failed:    return .failed
+        }
+    }
+
+    /// E4-PR5B: build a `SafeContext` from non-sensitive metadata descriptors.
+    private func playbackSafeContext() -> PlaybackTelemetry.SafeContext {
+        PlaybackTelemetry.SafeContext(
+            mediaType: metadata.type,
+            ratingKey: metadata.ratingKey,
+            codecFamily: ContentRouter.primaryVideoCodec(from: metadata)?.lowercased(),
+            containerFamily: metadata.Media?.first?.container?.lowercased()
+        )
+    }
+
+    /// E4-PR5B: emit one safe `routeSelected` event for the chosen route. The
+    /// route name reflects the player × route family (RPlayer serves
+    /// direct/remux via its DirectPlay pipeline); it is never a URL.
+    private func emitRouteSelectedTelemetry(plan: PlaybackPlan, useApplePlayer: Bool) {
+        let player = PlaybackRoutingPolicy.player(
+            RoutingInput(
+                videoRequiresTranscode: ContentRouter.requiresVideoTranscode(metadata: metadata),
+                useApplePlayer: useApplePlayer,
+                avKitFirst: false
+            )
+        )
+        let route: PlaybackTelemetry.RouteName
+        switch plan.primary {
+        case .avPlayerDirect:
+            route = player == .rivulet ? .rplayerDirectPlay : .avPlayerDirect
+        case .localRemux:
+            route = player == .rivulet ? .rplayerDirectPlay : .localRemux
+        case .hls:
+            route = .hls
+        }
+        PlaybackTelemetry.emit(
+            .routeSelected(
+                playbackSafeContext(),
+                route: route,
+                reason: plan.reasoning.first ?? "unspecified"
+            )
+        )
     }
 
     /// Determines whether audio can be safely direct-streamed on the HLS path.
@@ -1070,7 +1141,18 @@ final class UniversalPlayerViewModel: ObservableObject {
         // AVPlayer path consumes the resulting HLS stream end-to-end.
         let mustUseAVPlayer = ContentRouter.requiresVideoTranscode(metadata: metadata)
 
-        if !useApplePlayer && !mustUseAVPlayer {
+        // E4-PR5B: PlaybackRoutingPolicy is the single source for the player
+        // choice. `avKitFirst` stays false, so this is identical to the historical
+        // `!useApplePlayer && !mustUseAVPlayer` → RPlayer rule (verified by
+        // PlaybackRoutingPolicyTests + PlaybackPolicyIntegrationTests).
+        let selectedPlayer = PlaybackRoutingPolicy.player(
+            RoutingInput(
+                videoRequiresTranscode: mustUseAVPlayer,
+                useApplePlayer: useApplePlayer,
+                avKitFirst: false
+            )
+        )
+        if selectedPlayer == .rivulet {
             await startRivuletPlayback()
         } else {
             await startAVPlayerPlayback()

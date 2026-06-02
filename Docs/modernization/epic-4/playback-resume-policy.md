@@ -86,3 +86,28 @@ contract, so telemetry emission is **deferred** (consistent with E4-PR2/PR3). A
 
 Confirmed: no default route change, no playback UX change, no resume-prompt
 change, no provider-boundary change. Pure extraction + tests + docs.
+
+---
+
+## 8. Live integration (E4-PR5B, 2026-06-02)
+
+**`PlaybackResumePolicy.decide()` is now LIVE** as the single source for the
+resume/restart **prompt** decision in `MediaDetailView.presentPlay`: the old
+`promptResumeOrRestart && item.isInProgress && offsetSec > 0` branch is replaced
+by `decide(ResumeInput(viewOffsetMs:durationMs:promptEnabled:…))`, prompting iff
+the result is `.prompt(offsetMs)` (with `offsetMs` == the old
+`Int(offsetSec*1000)` seed). `viewOffset`/`runtime` are seconds derived from
+integer-millisecond Plex values, so the ms conversion is lossless and
+`isInProgress` is bit-identical to `MediaItem.isInProgress` — proven by
+`PlaybackPolicyIntegrationTests` across representative values **and the exact 98%
+boundary**. Live TV / trailers never route through `presentPlay`, so those flags
+stay false.
+
+**Deferred (still `DEBT-E4-PR4-001`, reduced):** the start-offset *arithmetic*
+in the play-launch closure (`playFromBeginning ? nil : (offsetSec>0 ? offsetSec : nil)`)
+is kept in seconds and **not** routed through `startOffsetMs`, because the policy
+is millisecond-integer and the live value is a full-precision `TimeInterval`; a
+round-trip would introduce sub-millisecond drift (a technical, if imperceptible,
+behaviour change). It is wired only once the seek path itself moves to
+milliseconds (with the routing integration, E4-PR6). Watch-state writes (Epic 1)
+remain untouched.

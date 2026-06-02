@@ -1148,9 +1148,25 @@ struct MediaDetailView: View {
     /// / `showPlayer` as needed. `userState.viewOffset` is in seconds; the
     /// formatter wants milliseconds.
     private func presentPlay(for item: MediaItem, launch: @escaping (_ playFromBeginning: Bool) -> Void) {
+        // E4-PR5B: PlaybackResumePolicy is the single source for the resume /
+        // restart prompt decision. `viewOffset`/`runtime` are seconds, sourced
+        // from integer-millisecond Plex values, so the ms conversion is exact and
+        // `decide` reproduces `promptResumeOrRestart && isInProgress && offset>0`
+        // verbatim (verified by PlaybackPolicyIntegrationTests). Live TV /
+        // trailers do not route through `presentPlay`, so those flags stay false.
         let offsetSec = item.userState.viewOffset
-        if promptResumeOrRestart, item.isInProgress, offsetSec > 0 {
-            resumeChoiceTimeMs = Int(offsetSec * 1000)
+        let decision = PlaybackResumePolicy.decide(
+            PlaybackResumePolicy.ResumeInput(
+                viewOffsetMs: Int(offsetSec * 1000),
+                durationMs: Int((item.runtime ?? 0) * 1000),
+                promptEnabled: promptResumeOrRestart,
+                explicitRestart: false,
+                isLive: false,
+                isTrailer: false
+            )
+        )
+        if case .prompt(let offsetMs) = decision {
+            resumeChoiceTimeMs = offsetMs
             resumeChoiceLaunch = launch
             showResumeChoice = true
         } else {
