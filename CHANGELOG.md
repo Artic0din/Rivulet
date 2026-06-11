@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Hardened the HLS fallback path in `HLSSegmentFetcher`: replaced two force-unwraps (`throw lastError!`, `variants.max(...)!`) with safe fallbacks so the fallback fetch — which only runs when playback is already failing — cannot trap if its control flow changes (audit finding M-3).
+
 ## 1.0.0 (Build 48)
 
 - Added Discover + Watchlist tabs

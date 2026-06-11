@@ -120,7 +120,12 @@ final class HLSSegmentFetcher {
                 }
             }
         }
-        throw lastError!
+        // Every loop iteration that fails sets `lastError`, and the range
+        // `0...maxRetries` always runs at least once, so this is non-nil in
+        // practice. Fall back to a descriptive error rather than force-unwrap
+        // so a future control-flow change can't turn this fallback path — which
+        // only runs when playback is already failing — into a crash.
+        throw lastError ?? HLSFetcherError.invalidResponse
     }
 
     // MARK: - Segment Fetching
@@ -245,8 +250,13 @@ final class HLSSegmentFetcher {
             throw error
         }
 
-        // Pick highest bandwidth
-        let best = variants.max(by: { $0.bandwidth < $1.bandwidth })!
+        // Pick highest bandwidth. The `guard !variants.isEmpty` above means
+        // `max` is non-nil here; fall back to `noVariantsFound` instead of
+        // force-unwrapping so this fallback path stays crash-proof if the
+        // guard is ever changed.
+        guard let best = variants.max(by: { $0.bandwidth < $1.bandwidth }) else {
+            throw HLSFetcherError.noVariantsFound
+        }
         return best.url
     }
 
