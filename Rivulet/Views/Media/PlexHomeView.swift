@@ -66,8 +66,13 @@ struct PlexHomeView: View {
             result.append(hub)
         }
 
-        // Add "Recently Added" hub for each library shown on Home (video and music)
+        // Add "Recently Added" hub for each library shown on Home (video and,
+        // when the Music feature is enabled, music). Music libraries are
+        // skipped while the feature is hidden so no music shelf is advertised.
         for library in dataStore.librariesForHomeScreen {
+            if !FeatureFlags.musicEnabled && library.isMusicLibrary {
+                continue
+            }
             if let hubs = dataStore.libraryHubs[library.key] {
                 // Find the "Recently Added" hub for this library
                 if let recentlyAddedHub = hubs.first(where: { isRecentlyAddedHub($0) }) {

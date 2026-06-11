@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Hid the Live TV and Music sections behind compile-time `FeatureFlags` (default off). The sidebar sections, settings rows, music home shelves, and music search results no longer appear. All code and SwiftData models stay in place, so on-disk stores remain valid and the features can be re-enabled by flipping a flag.
+
 ## 1.0.0 (Build 48)
 
 - Added Discover + Watchlist tabs
