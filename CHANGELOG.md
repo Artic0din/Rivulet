@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Launch no longer crashes when the local SwiftData store is corrupt, un-migratable, or unwritable. The store is reset and rebuilt, falling back to an in-memory store as a last resort, with a dismissable on-screen notice when local watch history was reset (audit finding C-1).
+
 ## 1.0.0 (Build 48)
 
 - Added Discover + Watchlist tabs

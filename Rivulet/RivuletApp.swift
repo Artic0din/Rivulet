@@ -83,7 +83,12 @@ struct RivuletApp: App {
         // NowPlayingService.shared.initialize()
     }
 
-    var sharedModelContainer: ModelContainer = {
+    private let modelStore = RivuletApp.buildModelContainer()
+
+    /// Builds the shared container via ``ModelContainerFactory`` so a corrupt or
+    /// un-migratable store degrades gracefully (reset → in-memory) instead of
+    /// crashing at launch. See audit finding C-1.
+    private static func buildModelContainer() -> ModelContainerBuildResult {
         let schema = Schema([
             ServerConfiguration.self,
             PlexServer.self,
@@ -93,26 +98,51 @@ struct RivuletApp: App {
             WatchProgress.self,
             EPGProgram.self,
         ])
-        let modelConfiguration = ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: false,
-            allowsSave: true
-        )
+
+        // SwiftData's default persistent store lives at
+        // Application Support/default.store.
+        let storeURL = URL.applicationSupportDirectory.appending(path: "default.store")
+
+        let diagnostics: ModelContainerFactory.DiagnosticSink = { message, error in
+            #if !DEBUG
+            SentrySDK.capture(message: message) { scope in
+                scope.setExtra(value: "\(error)", key: "underlyingError")
+            }
+            #else
+            print("[ModelContainer] \(message): \(error)")
+            #endif
+        }
 
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            return try ModelContainerFactory.build(
+                storeURL: storeURL,
+                makePersistent: { url in
+                    let config = ModelConfiguration(schema: schema, url: url, allowsSave: true)
+                    return try ModelContainer(for: schema, configurations: [config])
+                },
+                makeInMemory: {
+                    let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+                    return try ModelContainer(for: schema, configurations: [config])
+                },
+                removeStoreFiles: ModelContainerFactory.defaultRemoveStoreFiles,
+                diagnostics: diagnostics
+            )
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            // Only reached if even the in-memory store cannot be created — an
+            // unrecoverable runtime environment. There is no usable container to
+            // hand SwiftUI, so this is the one genuinely fatal path.
+            diagnostics("ModelContainer build exhausted all fallbacks", error)
+            fatalError("Could not create any ModelContainer: \(error)")
         }
-    }()
+    }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(storeResolution: modelStore.resolution)
                 .environment(MediaProviderRegistry.shared)
                 .environment(MusicProviderRegistry.shared)
                 .environment(MetadataSourceRegistry.shared)
         }
-        .modelContainer(sharedModelContainer)
+        .modelContainer(modelStore.container)
     }
 }

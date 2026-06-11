@@ -25,6 +25,17 @@ struct ContentView: View {
     @State private var showSplash = true
     #endif
 
+    /// How the SwiftData store was built at launch. Drives the non-fatal
+    /// "local history was reset" notice (audit finding C-1). Defaults to
+    /// `.persistent` so previews/tests need not supply it.
+    private let storeResolution: ModelStoreResolution
+    @State private var showStoreNotice: Bool
+
+    init(storeResolution: ModelStoreResolution = .persistent) {
+        self.storeResolution = storeResolution
+        _showStoreNotice = State(initialValue: storeResolution != .persistent)
+    }
+
     var body: some View {
         TVSidebarView()
             .modifier(AutoPlayLauncherModifier())
@@ -34,7 +45,14 @@ struct ContentView: View {
                         .transition(.opacity)
                 }
             }
+            .overlay(alignment: .top) {
+                if showStoreNotice {
+                    storeNoticeBanner
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
             .animation(.easeOut(duration: 0.4), value: showSplash)
+            .animation(.easeOut(duration: 0.3), value: showStoreNotice)
         .onChange(of: authManager.hasCredentials) { _, hasCredentials in
             splashLog.info("hasCredentials changed to \(hasCredentials)")
             if !hasCredentials {
@@ -101,6 +119,42 @@ struct ContentView: View {
                 Task { await dataStore.refreshLibraries() }
             }
         }
+    }
+
+    /// Non-fatal notice shown when the persistent store had to be reset or fell
+    /// back to memory at launch (audit finding C-1). Dismissable with the remote.
+    private var storeNoticeBanner: some View {
+        let message: String
+        switch storeResolution {
+        case .persistent:
+            message = ""
+        case .recoveredAfterReset:
+            message = "Local watch history was reset after a storage problem. Your Plex account and watched state on the server are unaffected."
+        case .inMemoryFallback:
+            message = "Local storage is unavailable, so watch history won't be saved this session. Your Plex account is unaffected."
+        }
+
+        return Button {
+            showStoreNotice = false
+        } label: {
+            HStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.yellow)
+                Text(message)
+                    .font(.callout)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 24)
+                Text("Dismiss")
+                    .font(.callout.weight(.semibold))
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 48)
+        .padding(.top, 32)
     }
 
     private var splashOverlay: some View {
