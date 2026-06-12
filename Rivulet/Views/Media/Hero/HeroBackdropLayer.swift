@@ -31,6 +31,14 @@ struct HeroBackdropLayer: View {
                     )
             }
 
+            // ADO-06: subtle artwork-driven tint, above the art and beneath the
+            // scrims below. Reuses the cached backdrop image (no new fetch);
+            // disabled under Increase Contrast.
+            AdaptiveTintLayer(
+                itemKey: currentItem?.ratingKey,
+                artworkURL: backdrop.session.displayedBackdropURL
+            )
+
             // Horizontal scrim so the left-aligned logo/metadata/buttons stay legible.
             LinearGradient(
                 stops: [

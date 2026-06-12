@@ -314,6 +314,11 @@ final class UniversalPlayerViewModel: ObservableObject {
     @Published var postVideoState: PostVideoState = .hidden
     @Published var videoFrameState: VideoFrameState = .fullscreen
     @Published private(set) var nextEpisode: PlexMetadata?
+    /// Native tvOS "Up Next" proposal for the AVPlayer route. Published here and
+    /// attached to the current `AVPlayerItem` by `NativePlayerViewController`. When
+    /// non-nil, the native banner is the *sole* advance mechanism — the custom
+    /// post-video overlay is suppressed (see `handlePlaybackEnded`).
+    @Published private(set) var avContentProposal: AVContentProposal?
     @Published private(set) var recommendations: [PlexMetadata] = []
     @Published var countdownSeconds: Int = 0
     @Published var isCountdownPaused: Bool = false
@@ -618,7 +623,18 @@ final class UniversalPlayerViewModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            if self.playbackState == .playing {
+            // E4-PR5B: PlaybackInterruptionRecoveryPolicy decides the background
+            // action. With phase==.playing it returns `.pauseAwaitingUser`
+            // (pause + hold for manual resume) — identical to the historical
+            // `playbackState == .playing` check; any other phase → `.noAction`.
+            let decision = PlaybackInterruptionRecoveryPolicy.decide(
+                InterruptionInput(
+                    source: .appBackgrounded,
+                    player: self.player != nil ? .avKit : .rivulet,
+                    phase: Self.recoveryPhase(for: self.playbackState)
+                )
+            )
+            if decision == .pauseAwaitingUser {
                 self.pausedDueToAppInactive = true
                 print("[Remux] App entering background — pausing")
                 Task { @MainActor in
@@ -666,6 +682,11 @@ final class UniversalPlayerViewModel: ObservableObject {
         rivuletFallbackURL = nil
         rivuletFallbackHeaders = [:]
 
+        // E4-PR5B: live `routeSelected` emission through the safe telemetry
+        // contract (E4-PR2). The route name is anonymised (never a URL); the
+        // reason is the router's own reasoning token, scrubbed at the sink.
+        emitRouteSelectedTelemetry(plan: plan, useApplePlayer: useApplePlayer)
+
         switch plan.primary {
         case .avPlayerDirect(let url, let headers):
             // AVPlayer direct — use the URL from the plan
@@ -708,6 +729,61 @@ final class UniversalPlayerViewModel: ObservableObject {
                 plexSessionId = result.sessionId
             }
         }
+    }
+
+    /// E4-PR5B: map the universal playback state to the policy's coarse phase.
+    /// `.ready` (a transient pre-playing state) maps to `.loading`; the only
+    /// phase the background decision actually branches on is `.playing`.
+    private static func recoveryPhase(for state: UniversalPlaybackState) -> PlaybackPhase {
+        switch state {
+        case .idle:      return .idle
+        case .loading:   return .loading
+        case .ready:     return .loading
+        case .playing:   return .playing
+        case .paused:    return .paused
+        case .buffering: return .buffering
+        case .ended:     return .ended
+        case .failed:    return .failed
+        }
+    }
+
+    /// E4-PR5B: build a `SafeContext` from non-sensitive metadata descriptors.
+    private func playbackSafeContext() -> PlaybackTelemetry.SafeContext {
+        PlaybackTelemetry.SafeContext(
+            mediaType: metadata.type,
+            ratingKey: metadata.ratingKey,
+            codecFamily: ContentRouter.primaryVideoCodec(from: metadata)?.lowercased(),
+            containerFamily: metadata.Media?.first?.container?.lowercased()
+        )
+    }
+
+    /// E4-PR5B: emit one safe `routeSelected` event for the chosen route. The
+    /// route name reflects the player × route family (RPlayer serves
+    /// direct/remux via its DirectPlay pipeline); it is never a URL.
+    private func emitRouteSelectedTelemetry(plan: PlaybackPlan, useApplePlayer: Bool) {
+        let player = PlaybackRoutingPolicy.player(
+            RoutingInput(
+                videoRequiresTranscode: ContentRouter.requiresVideoTranscode(metadata: metadata),
+                useApplePlayer: useApplePlayer,
+                avKitFirst: false
+            )
+        )
+        let route: PlaybackTelemetry.RouteName
+        switch plan.primary {
+        case .avPlayerDirect:
+            route = player == .rivulet ? .rplayerDirectPlay : .avPlayerDirect
+        case .localRemux:
+            route = player == .rivulet ? .rplayerDirectPlay : .localRemux
+        case .hls:
+            route = .hls
+        }
+        PlaybackTelemetry.emit(
+            .routeSelected(
+                playbackSafeContext(),
+                route: route,
+                reason: plan.reasoning.first ?? "unspecified"
+            )
+        )
     }
 
     /// Determines whether audio can be safely direct-streamed on the HLS path.
@@ -871,6 +947,9 @@ final class UniversalPlayerViewModel: ObservableObject {
                         let dur = item.duration.seconds
                         if dur.isFinite { self.duration = dur }
                         self.updateTrackLists()
+                        // Native Up Next: now that duration is known, build and
+                        // publish the content proposal for the AVPlayer route.
+                        Task { [weak self] in await self?.prepareNextContentProposalIfNeeded() }
                     case .failed:
                         let message = item.error?.localizedDescription ?? "Playback failed"
                         print("[Player] AVPlayerItem status: FAILED — \(message)")
@@ -1070,7 +1149,18 @@ final class UniversalPlayerViewModel: ObservableObject {
         // AVPlayer path consumes the resulting HLS stream end-to-end.
         let mustUseAVPlayer = ContentRouter.requiresVideoTranscode(metadata: metadata)
 
-        if !useApplePlayer && !mustUseAVPlayer {
+        // E4-PR5B: PlaybackRoutingPolicy is the single source for the player
+        // choice. `avKitFirst` stays false, so this is identical to the historical
+        // `!useApplePlayer && !mustUseAVPlayer` → RPlayer rule (verified by
+        // PlaybackRoutingPolicyTests + PlaybackPolicyIntegrationTests).
+        let selectedPlayer = PlaybackRoutingPolicy.player(
+            RoutingInput(
+                videoRequiresTranscode: mustUseAVPlayer,
+                useApplePlayer: useApplePlayer,
+                avKitFirst: false
+            )
+        )
+        if selectedPlayer == .rivulet {
             await startRivuletPlayback()
         } else {
             await startAVPlayerPlayback()
@@ -1319,7 +1409,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             SentrySDK.capture(error: error) { scope in
                 scope.setTag(value: "playback", key: "component")
                 scope.setTag(value: "avplayer", key: "player_type")
-                scope.setExtra(value: url.absoluteString, key: "stream_url")
+                scope.setExtra(value: SensitiveDataRedactor.redactedURLValue, key: "stream_url")
                 scope.setExtra(value: self.metadata.title ?? "unknown", key: "media_title")
                 scope.setExtra(value: self.metadata.type ?? "unknown", key: "media_type")
                 scope.setExtra(value: self.metadata.ratingKey ?? "unknown", key: "rating_key")
@@ -1410,9 +1500,50 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
     }
 
+    /// E4-PR5C: map a plan's primary route to the policy's route family.
+    private func planAttemptedFamily(_ plan: PlaybackPlan?) -> RouteFamily {
+        switch plan?.primary {
+        case .avPlayerDirect: return .avPlayerDirect
+        case .localRemux:     return .localRemux
+        case .hls, .none:     return .hls
+        }
+    }
+
+    /// E4-PR5C: map a direct-play failure kind to the safe telemetry category.
+    private func telemetryFailureCategory(_ kind: DirectPlayFailureKind) -> PlaybackTelemetry.FailureCategory {
+        switch kind {
+        case .unsupportedCodec: return .unsupported
+        case .demuxInit:        return .demux
+        case .decodeInit:       return .decode
+        case .network:          return .network
+        case .runtimeFatal:     return .unknown
+        case .unknown:          return .unknown
+        }
+    }
+
+    /// E4-PR5C: the AVPlayer-path fallback decision, sourced from the corrected
+    /// `PlaybackFallbackPolicy`. This is the single decision source for "should
+    /// the AVPlayer path reload as Plex HLS?"; the concurrency/dedup mechanics
+    /// (`isAttempting`, `streamURL`, current-vs-prebuilt-fallback) stay at the
+    /// call sites. With `player: .avKit` the decision is `.fallback(.hls)` iff
+    /// an HLS route is available, it has not been attempted, and we are not
+    /// already on HLS — identical to the prior `planHasHLSFallback && !attempted`
+    /// gate (verified by PlaybackPolicyIntegrationTests).
+    private func avPlayerFallbackDecision(plan: PlaybackPlan?) -> PlaybackFallbackDecision {
+        PlaybackFallbackPolicy.decide(
+            FallbackInput(
+                player: .avKit,
+                attemptedFamily: planAttemptedFamily(plan),
+                failure: .unknown,
+                hlsFallbackAlreadyAttempted: hasAttemptedRivuletHLSFallback,
+                hlsRouteAvailable: planHasHLSFallback(plan)
+            )
+        )
+    }
+
     private func shouldAttemptRivuletFallbackOnItemFailure() -> Bool {
-        guard planHasHLSFallback(playbackPlan) else { return false }
-        guard !hasAttemptedRivuletHLSFallback, !isAttemptingRivuletHLSFallback else { return false }
+        guard case .fallback = avPlayerFallbackDecision(plan: playbackPlan) else { return false }
+        guard !isAttemptingRivuletHLSFallback else { return false }
         guard let current = streamURL else { return false }
         if let fallback = rivuletFallbackURL, current == fallback {
             return false
@@ -1486,7 +1617,11 @@ final class UniversalPlayerViewModel: ObservableObject {
             do {
                 try loadAVPlayer(url: directURL, headers: directHeaders)
             } catch {
-                guard planHasHLSFallback(plan) else { throw error }
+                // E4-PR5C: PlaybackFallbackPolicy is the decision source for the
+                // AVPlayer-path HLS fallback. `.fallback` iff an HLS route is
+                // available (identical to the old `planHasHLSFallback` gate at
+                // startup, where the one-shot has not yet been spent).
+                guard case .fallback = avPlayerFallbackDecision(plan: plan) else { throw error }
                 let kind = classifyDirectPlayFailure(error)
                 try await attemptRivuletHLSFallback(
                     resumeTime: startTime ?? 0,
@@ -1516,7 +1651,11 @@ final class UniversalPlayerViewModel: ObservableObject {
                 }
                 print("[Remux] Ready in \(readyMs)ms")
             } catch {
-                guard planHasHLSFallback(plan) else { throw error }
+                // E4-PR5C: PlaybackFallbackPolicy is the decision source for the
+                // AVPlayer-path HLS fallback. `.fallback` iff an HLS route is
+                // available (identical to the old `planHasHLSFallback` gate at
+                // startup, where the one-shot has not yet been spent).
+                guard case .fallback = avPlayerFallbackDecision(plan: plan) else { throw error }
                 let kind = classifyDirectPlayFailure(error)
                 try await attemptRivuletHLSFallback(
                     resumeTime: startTime ?? 0,
@@ -1563,21 +1702,15 @@ final class UniversalPlayerViewModel: ObservableObject {
         do {
             let (data, _) = try await URLSession.shared.data(for: request)
             if let manifest = String(data: data, encoding: .utf8) {
-                print("[HLS Manifest] ===== Master Playlist =====")
-                for line in manifest.components(separatedBy: "\n") {
-                    print("[HLS Manifest] \(line)")
-                }
-                print("[HLS Manifest] ===== End =====")
-
-                // Quick summary
-                let hasIFrame = manifest.contains("EXT-X-I-FRAME")
+                // SECURITY: the manifest body contains token-bearing URLs — log a
+                // token-free structural summary, never the body. Track counts
+                // (audio/subtitle/I-frame) remain useful without leaking URLs.
                 let audioTags = manifest.components(separatedBy: "\n").filter { $0.contains("TYPE=AUDIO") }
                 let subtitleTags = manifest.components(separatedBy: "\n").filter { $0.contains("TYPE=SUBTITLES") }
-                print("[HLS Manifest] I-Frame playlist: \(hasIFrame ? "YES" : "NO")")
-                print("[HLS Manifest] Audio tracks: \(audioTags.count)")
-                print("[HLS Manifest] Subtitle tracks: \(subtitleTags.count)")
+                print("[HLS Manifest] Master: \(HLSManifestEnricher.manifestDiagnosticSummary(manifest)) audio=\(audioTags.count) subtitles=\(subtitleTags.count)")
 
-                // Also fetch and log keyframe playlist if present
+                // Also fetch the keyframe playlist if present — log a count-only
+                // summary (its lines are token-bearing segment URLs).
                 if let iframeLine = manifest.components(separatedBy: "\n")
                     .first(where: { $0.contains("EXT-X-I-FRAME-STREAM-INF") }),
                    let uriRange = iframeLine.range(of: "URI=\""),
@@ -1594,16 +1727,14 @@ final class UniversalPlayerViewModel: ObservableObject {
                         for (key, value) in headers { kfRequest.setValue(value, forHTTPHeaderField: key) }
                         if let (kfData, _) = try? await URLSession.shared.data(for: kfRequest),
                            let kfManifest = String(data: kfData, encoding: .utf8) {
-                            let kfLines = kfManifest.components(separatedBy: "\n")
-                            print("[HLS Manifest] ===== Keyframe Playlist (\(kfLines.count) lines) =====")
-                            for line in kfLines.prefix(20) { print("[HLS Manifest/KF] \(line)") }
-                            if kfLines.count > 20 { print("[HLS Manifest/KF] ... (\(kfLines.count - 20) more lines)") }
+                            print("[HLS Manifest] Keyframe: \(HLSManifestEnricher.manifestDiagnosticSummary(kfManifest))")
                         }
                     }
                 }
             }
         } catch {
-            print("[HLS Manifest] Failed to fetch: \(error.localizedDescription)")
+            // Redact: URLSession errors can embed the token-bearing failing URL.
+            print("[HLS Manifest] Failed to fetch: \(SensitiveDataRedactor.redact(String(describing: error)) ?? "error")")
         }
     }
 
@@ -1666,24 +1797,28 @@ final class UniversalPlayerViewModel: ObservableObject {
     private func buildExternalMetadata() -> [AVMetadataItem] {
         var items: [AVMetadataItem] = []
 
-        // Title
-        let displayTitle: String
+        // Title view above the scrubber (per AVKit docs): commonIdentifierTitle is
+        // the big bold title; iTunesMetadataTrackSubTitle is the smaller line above
+        // it. Match the Apple TV reference:
+        //   Movie   → title = "Project Hail Mary",  subtitle = "2026"
+        //   Episode → title = "Law & Order: SVU",    subtitle = "2026 · S27, E12 · Hubris"
+        let headerTitle: String
+        let headerSubtitle: String?
         if metadata.type == "episode" {
-            let seasonNum = metadata.parentIndex ?? 0
-            let episodeNum = metadata.index ?? 0
-            let epTitle = metadata.title ?? ""
-            displayTitle = "S\(seasonNum) E\(episodeNum) · \(epTitle)"
+            headerTitle = metadata.grandparentTitle ?? (metadata.title ?? "")
+            // No year here: AVKit prepends the release year (from the creation
+            // date) to this subtitle line, so including it would duplicate.
+            var parts: [String] = []
+            if let s = metadata.parentIndex, let e = metadata.index { parts.append("S\(s), E\(e)") }
+            if let epTitle = metadata.title, !epTitle.isEmpty { parts.append(epTitle) }
+            headerSubtitle = parts.isEmpty ? nil : parts.joined(separator: " · ")
         } else {
-            displayTitle = metadata.title ?? ""
+            headerTitle = metadata.title ?? ""
+            headerSubtitle = nil   // AVKit shows the release year alone under the title
         }
-        items.append(makeMetadataItem(.commonIdentifierTitle, value: displayTitle))
-
-        // Show name (for episodes)
-        if metadata.type == "episode", let showName = metadata.grandparentTitle {
-            items.append(makeMetadataItem(
-                .iTunesMetadataTrackSubTitle,
-                value: showName
-            ))
+        items.append(makeMetadataItem(.commonIdentifierTitle, value: headerTitle))
+        if let headerSubtitle {
+            items.append(makeMetadataItem(.iTunesMetadataTrackSubTitle, value: headerSubtitle))
         }
 
         // Description
@@ -1707,11 +1842,18 @@ final class UniversalPlayerViewModel: ObservableObject {
             ))
         }
 
-        // Year
-        if let year = metadata.year {
+        // Release year — drives the year AVKit shows in the title view + Info line.
+        // AVKit reads commonIdentifierCreationDate via its `dateValue`, so it must
+        // be a real `Date` (NSDate). A bare year String is ignored → AVKit falls
+        // back to the HLS-transcode asset's "now" creation date (2026); a full ISO
+        // string mis-renders to a serial number. We build Jan 1 of the release year.
+        let releaseYearInt: Int? = metadata.year
+            ?? metadata.originallyAvailableAt.flatMap { Int($0.prefix(4)) }
+        if let year = releaseYearInt,
+           let releaseDate = Calendar.current.date(from: DateComponents(year: year, month: 1, day: 1)) {
             items.append(makeMetadataItem(
                 .commonIdentifierCreationDate,
-                value: String(year)
+                value: releaseDate as NSDate
             ))
         }
 
@@ -1749,8 +1891,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     private func fetchSeasonPosterIfNeeded() async {
         guard metadata.type == "episode" else { return }
 
-        // Try season poster first, then show poster
-        let posterPath = metadata.parentThumb ?? metadata.grandparentThumb
+        // Info-tab / Now Playing artwork for episodes is the episode still
+        // (matches the Apple TV reference, which shows the episode thumb for TV;
+        // movies use their poster via loadingThumbImage). Fall back to season/show.
+        let posterPath = metadata.thumb ?? metadata.parentThumb ?? metadata.grandparentThumb
         guard let path = posterPath else { return }
 
         let urlString = "\(serverURL)\(path)?X-Plex-Token=\(authToken)"
@@ -1863,6 +2007,10 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// Build navigation markers from Plex chapters (preferred) or intro/credits markers (fallback).
     private func buildNavigationMarkers() -> [AVNavigationMarkersGroup]? {
+        // Chapters tab is movie-only — the Apple TV reference shows TV episodes
+        // with Info + Continue Watching only (no Chapters).
+        guard metadata.type != "episode" else { return nil }
+
         // Prefer real chapters from the media file (Plex returns these at metadata level, not Part level)
         let chapters = metadata.Chapter ?? []
         if !chapters.isEmpty {
@@ -1957,7 +2105,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         self.remuxServer = server
 
         let localURL = try server.start()
-        print("[Remux] Server started: \(localURL), segments=\(sessionInfo.segments.count), target=seg\(clampedIdx)")
+        // localURL is a loopback proxy URL (no Plex token), but redact for
+        // policy consistency — diagnostics never emit unredacted stream URLs.
+        print("[Remux] Server started: \(SensitiveDataRedactor.redact(localURL) ?? SensitiveDataRedactor.redactedURLValue), segments=\(sessionInfo.segments.count), target=seg\(clampedIdx)")
 
         try loadAVPlayer(url: localURL, headers: nil)
 
@@ -2006,6 +2156,26 @@ final class UniversalPlayerViewModel: ObservableObject {
         defer { isAttemptingRivuletHLSFallback = false }
 
         print("[Fallback] Failed (\(failureKind.rawValue), reason=\(reason)) → HLS")
+
+        // E4-PR5C: this is the live AVPlayer-path one-shot HLS fallback firing —
+        // emit a safe `routeFellBack` (anonymised route names + typed failure
+        // category; no URL/token expressible). `from` is the route we are
+        // leaving (AVKit direct/remux); `to` is HLS.
+        let fromRoute: PlaybackTelemetry.RouteName = {
+            switch planAttemptedFamily(playbackPlan) {
+            case .avPlayerDirect: return .avPlayerDirect
+            case .localRemux:     return .localRemux
+            case .hls:            return .hls
+            }
+        }()
+        PlaybackTelemetry.emit(
+            .routeFellBack(
+                playbackSafeContext(),
+                from: fromRoute,
+                to: .hls,
+                category: telemetryFailureCategory(failureKind)
+            )
+        )
 
         let fallback: (url: URL, headers: [String: String], sessionId: String?)?
         if resumeTime <= 0.5, let prebuiltURL = rivuletFallbackURL, !rivuletFallbackHeaders.isEmpty {
@@ -2760,11 +2930,11 @@ final class UniversalPlayerViewModel: ObservableObject {
                 await subtitleManager.load(url: candidateURL, headers: headers, format: formatHintForCandidate)
                 if subtitleManager.error == nil {
                     loaded = true
-                    print("🎬 [Subtitles] Loaded subtitle track \(trackId) from \(candidateURL.absoluteString)")
+                    print("🎬 [Subtitles] Loaded subtitle track \(trackId) from \(SensitiveDataRedactor.redact(candidateURL) ?? SensitiveDataRedactor.redactedURLValue)")
                     break
                 }
                 print(
-                    "🎬 [Subtitles] Candidate failed for track \(trackId): \(candidateURL.absoluteString) " +
+                    "🎬 [Subtitles] Candidate failed for track \(trackId): \(SensitiveDataRedactor.redact(candidateURL) ?? SensitiveDataRedactor.redactedURLValue) " +
                     "(\(subtitleManager.error?.localizedDescription ?? "unknown error"))"
                 )
             }
@@ -3466,6 +3636,15 @@ final class UniversalPlayerViewModel: ObservableObject {
         // Mark as watched immediately when playback ends/reaches credits
         await markCurrentAsWatched()
 
+        // AVPlayer route with a live native "Up Next" proposal: the native
+        // AVContentProposal banner owns the transition (present + countdown +
+        // auto-accept). Suppress the custom shrink/countdown overlay entirely so
+        // the two don't race into a double-advance.
+        if avContentProposal != nil {
+            postVideoState = .hidden
+            return
+        }
+
         postVideoState = .loading
 
         let isEpisode = metadata.type == "episode"
@@ -3643,6 +3822,127 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Native "Up Next" Content Proposal (AVPlayer route)
+
+    /// Seconds before the end of the current item at which the native banner
+    /// auto-accepts (advances). Reuses the `autoplayCountdown` preference; a
+    /// negative `automaticAcceptanceInterval` is measured from the item's end.
+    private var autoAdvanceTailSeconds: Double {
+        if UserDefaults.standard.object(forKey: "autoplayCountdown") == nil { return 10 }
+        let v = UserDefaults.standard.integer(forKey: "autoplayCountdown")
+        return v > 0 ? Double(v) : 10
+    }
+
+    /// Build and publish a native `AVContentProposal` describing the next episode
+    /// so `NativePlayerViewController` can attach it to the current player item.
+    /// Episode-only, gated on the user's "Up Next" preference. Called once the
+    /// AVPlayer item reaches `readyToPlay` (duration known).
+    func prepareNextContentProposalIfNeeded() async {
+        let isEpisode = metadata.type == "episode"
+        guard isEpisode, showPostVideoUpNext else {
+            avContentProposal = nil
+            return
+        }
+
+        // Resolve the next episode, reusing any value already set to avoid a
+        // double-advance with shuffle. (Explicit if/let — `??` would wrap the
+        // async call in a non-concurrent autoclosure.)
+        let resolved: PlexMetadata?
+        if let existing = nextEpisode {
+            resolved = existing
+        } else {
+            resolved = await fetchNextEpisode()
+        }
+        guard let next = resolved else {
+            print("[UpNext] no next episode — clearing proposal")
+            avContentProposal = nil
+            return
+        }
+        nextEpisode = next
+
+        // Present at the start of credits, else a 45s-from-end heuristic.
+        guard duration > 60 else {
+            print("[UpNext] duration too short/unknown (dur=\(duration)) — skipping proposal")
+            avContentProposal = nil
+            return
+        }
+        let transition: TimeInterval
+        if let credits = metadata.firstCreditsMarker {
+            transition = credits.startTimeSeconds
+        } else {
+            transition = duration - 45
+        }
+
+        let showTitle = next.grandparentTitle ?? next.title ?? "Next Episode"
+        let episodeLine = nextEpisodeLine(for: next)
+        // Full-bleed background of the card = the next episode's still (16:9).
+        let preview = await nextEpisodePreviewImage(for: next)
+
+        let proposal = AVContentProposal(
+            contentTimeForTransition: CMTime(seconds: transition, preferredTimescale: 600),
+            title: showTitle,
+            previewImage: preview
+        )
+        var proposalMetadata: [AVMetadataItem] = [
+            makeMetadataItem(.commonIdentifierDescription, value: episodeLine)
+        ]
+        // Show clearLogo (same series for current + next episode). Fetched raw so
+        // PNG transparency is preserved; the card renders it in place of text.
+        // Stashed in `.commonIdentifierSource` (a valid system identifier — custom
+        // keyspaces are rejected by AVMetadataItem validation).
+        if let logoPath = next.clearLogoPath ?? metadata.clearLogoPath {
+            let logoURL = "\(serverURL)\(logoPath)?X-Plex-Token=\(authToken)"
+            proposalMetadata.append(
+                makeMetadataItem(.commonIdentifierSource, value: logoURL)
+            )
+        }
+        proposal.metadata = proposalMetadata
+        // Negative interval → auto-accept measured from the end of the item.
+        proposal.automaticAcceptanceInterval = -autoAdvanceTailSeconds
+        // url left nil: the delegate's didAccept routes through playNextEpisode()
+        // so Plex headers/markers/progress are preserved.
+
+        avContentProposal = proposal
+        print("[UpNext] published proposal: \"\(showTitle) · \(episodeLine)\" transition=\(Int(transition))s autoAccept=\(proposal.automaticAcceptanceInterval)s")
+    }
+
+    /// "S{season}, E{episode} · {title}" for the card's secondary line
+    /// (matches the Apple TV app's formatting).
+    private func nextEpisodeLine(for ep: PlexMetadata) -> String {
+        if let s = ep.parentIndex, let e = ep.index {
+            let title = ep.title ?? ""
+            return title.isEmpty ? "S\(s), E\(e)" : "S\(s), E\(e) · \(title)"
+        }
+        return ep.title ?? ""
+    }
+
+    /// Fetch a 16:9 still for the next episode to use as the proposal card's
+    /// full-bleed background. Prefers the episode still (`thumb`), then show/season
+    /// art. Returns nil on failure (the card still renders with text only).
+    private func nextEpisodePreviewImage(for ep: PlexMetadata) async -> UIImage? {
+        let path = ep.thumb ?? ep.art ?? ep.grandparentArt ?? ep.parentThumb ?? ep.grandparentThumb
+        guard let path else { return nil }
+        let url = PlexNetworkManager.shared.buildThumbnailURL(
+            serverURL: serverURL,
+            authToken: authToken,
+            thumbPath: path,
+            width: 1920,
+            height: 1080
+        )
+        guard let url else { return nil }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            return UIImage(data: data)
+        } catch {
+            return nil
+        }
+    }
+
+    /// Clears the native proposal (e.g. when the user rejects the banner).
+    func cancelAutoAdvanceProposal() {
+        avContentProposal = nil
+    }
+
     /// Fetch recommendations for movies
     func fetchRecommendations() async -> [PlexMetadata] {
         guard let ratingKey = metadata.ratingKey else { return [] }
@@ -3795,6 +4095,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         introSkipCountdownSeconds = 0
         userDeclinedIntroAutoSkip = false
         nextEpisode = nil
+        // Drop the stale native proposal; a fresh one is published once the new
+        // item reaches readyToPlay.
+        avContentProposal = nil
 
         // Ensure next episode has required metadata for subsequent next-up detection
         if metadata.parentRatingKey == nil || metadata.index == nil {
@@ -3821,6 +4124,71 @@ final class UniversalPlayerViewModel: ObservableObject {
         // Safe to allow post-video detection now: the old time observer has been
         // replaced and time values reflect the new episode's actual position.
         hasTriggeredPostVideo = false
+    }
+
+    /// Play an arbitrary item (e.g. a Continue Watching selection from the native
+    /// player's info tab), swapping the current item in place. Resumes from the
+    /// item's saved position unless `fromBeginning` is true. Mirrors the swap
+    /// performed by `playNextEpisode()`.
+    func playItem(_ item: PlexMetadata, fromBeginning: Bool = false) async {
+        // Ignore re-selecting the item already playing (unless restarting).
+        if item.ratingKey == metadata.ratingKey && !fromBeginning { return }
+
+        await markCurrentAsWatched()
+
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        countdownSeconds = 0
+        isCountdownPaused = false
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            postVideoState = .hidden
+            videoFrameState = .fullscreen
+        }
+
+        metadata = item
+
+        // Continue Watching resumes from the saved position; else start at 0.
+        if !fromBeginning, let ms = item.viewOffset, ms > 0 {
+            startOffset = TimeInterval(ms) / 1000.0
+        } else {
+            startOffset = nil
+        }
+
+        hasSkippedIntro = false
+        skippedCreditsIds.removeAll()
+        skippedCommercialIds.removeAll()
+        introSkipCountdownTimer?.invalidate()
+        introSkipCountdownTimer = nil
+        introSkipCountdownSeconds = 0
+        userDeclinedIntroAutoSkip = false
+        nextEpisode = nil
+        avContentProposal = nil
+
+        if metadata.parentRatingKey == nil || metadata.index == nil {
+            await fetchFullMetadataIfNeeded()
+        }
+
+        resetPreparedStreamContext()
+        clearPreloadedData()
+        await ensureStreamURLPrepared()
+        await startPlayback()
+        hasTriggeredPostVideo = false
+    }
+
+    /// Fetch the user's Continue Watching (On Deck) items for the native player's
+    /// custom info tab. Excludes the item currently playing.
+    func loadContinueWatchingItems() async -> [PlexMetadata] {
+        do {
+            let items = try await PlexNetworkManager.shared.getOnDeck(
+                serverURL: serverURL,
+                authToken: authToken
+            )
+            return items.filter { $0.ratingKey != metadata.ratingKey }
+        } catch {
+            print("[Player] Continue Watching fetch failed: \(error)")
+            return []
+        }
     }
 
     /// Dismiss post-video overlay and return to fullscreen video

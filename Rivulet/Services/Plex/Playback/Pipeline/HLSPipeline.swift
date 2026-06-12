@@ -130,7 +130,7 @@ final class HLSPipeline {
         let breadcrumb = Breadcrumb(level: .info, category: "hls_pipeline")
         breadcrumb.message = "HLS Pipeline Load"
         breadcrumb.data = [
-            "stream_url": url.absoluteString,
+            "stream_url": SensitiveDataRedactor.redactedURLValue,
             "stream_host": url.host ?? "unknown",
             "segment_count": fetcher.segments.count,
             "duration": duration,

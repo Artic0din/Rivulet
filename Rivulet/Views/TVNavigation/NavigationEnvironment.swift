@@ -11,8 +11,10 @@ import Combine
 
 // MARK: - Sidebar Tab
 
-/// Tab selection type for the system TabView sidebar
-enum SidebarTab: Hashable {
+/// Tab selection type for the system TabView sidebar.
+/// `nonisolated`: pure value data, safe to compare from any context (the
+/// project defaults types to `@MainActor`; this enum needs no isolation).
+nonisolated enum SidebarTab: Hashable {
     case account
     case search
     case home

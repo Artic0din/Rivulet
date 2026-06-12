@@ -14,7 +14,10 @@ final class CredentialRegistryTests: XCTestCase {
         // Clean up any keychain residue from this test class
         await CredentialRegistry.shared.clearToken(for: .server(providerID: testProviderID))
         await CredentialRegistry.shared.clearToken(for: .serverUser(providerID: testProviderID, userID: "u1"))
+        await CredentialRegistry.shared.clearToken(for: .serverUser(providerID: testProviderID, userID: "u2"))
         await CredentialRegistry.shared.clearToken(for: .plexAccount(accountID: "credreg-test-acct"))
+        CredentialRegistry.shared.unregisterAccount(id: "credreg-test-acct")
+        CredentialRegistry.shared.unregisterServer(providerID: testProviderID)
         try await super.tearDown()
     }
 
@@ -33,14 +36,53 @@ final class CredentialRegistryTests: XCTestCase {
         XCTAssertNil(registry.token(for: scope))
     }
 
-    func test_serverUserScope_distinctFromServerScope() async throws {
+    func test_setToken_replacesExistingValue() async throws {
         let registry = CredentialRegistry.shared
+        let scope = CredentialScope.server(providerID: testProviderID)
+
+        try await registry.setToken("old-token", for: scope)
+        try await registry.setToken("new-token", for: scope)
+
+        XCTAssertEqual(registry.token(for: scope), "new-token")
+    }
+
+    func test_accountServerAndServerUserScopes_areDistinct() async throws {
+        let registry = CredentialRegistry.shared
+        let accountScope = CredentialScope.plexAccount(accountID: "credreg-test-acct")
         let serverScope = CredentialScope.server(providerID: testProviderID)
         let userScope = CredentialScope.serverUser(providerID: testProviderID, userID: "u1")
+        try await registry.setToken("account-token", for: accountScope)
         try await registry.setToken("server-token", for: serverScope)
         try await registry.setToken("user-token", for: userScope)
+        XCTAssertEqual(registry.token(for: accountScope), "account-token")
         XCTAssertEqual(registry.token(for: serverScope), "server-token")
         XCTAssertEqual(registry.token(for: userScope), "user-token")
+    }
+
+    func test_clearRegisteredCredentials_clearsAccountServerAndHomeUserTokens() async throws {
+        let registry = CredentialRegistry.shared
+        let accountScope = CredentialScope.plexAccount(accountID: "credreg-test-acct")
+        let serverScope = CredentialScope.server(providerID: testProviderID)
+        let firstUserScope = CredentialScope.serverUser(providerID: testProviderID, userID: "u1")
+        let secondUserScope = CredentialScope.serverUser(providerID: testProviderID, userID: "u2")
+
+        registry.registerAccount(AccountCredential(id: "credreg-test-acct", displayName: "Test Account", kind: .plex))
+        registry.registerServer(ServerCredential(id: testProviderID, displayName: "Test Server", userID: "u1", kind: .plex))
+        registry.registerServerUser(providerID: testProviderID, userID: "u2")
+        try await registry.setToken("account-token", for: accountScope)
+        try await registry.setToken("server-token", for: serverScope)
+        try await registry.setToken("home-user-token-1", for: firstUserScope)
+        try await registry.setToken("home-user-token-2", for: secondUserScope)
+
+        registry.clearRegisteredCredentials()
+
+        XCTAssertNil(registry.token(for: accountScope))
+        XCTAssertNil(registry.token(for: serverScope))
+        XCTAssertNil(registry.token(for: firstUserScope))
+        XCTAssertNil(registry.token(for: secondUserScope))
+        XCTAssertTrue(registry.accounts.isEmpty)
+        XCTAssertTrue(registry.serverCredentials.isEmpty)
+        XCTAssertTrue(registry.serverUserCredentialScopes.isEmpty)
     }
 
     func test_registerServer_addsAndDedupesByProviderID() {

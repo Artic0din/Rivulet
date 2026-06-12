@@ -722,7 +722,7 @@ class LiveTVDataStore: ObservableObject {
                 "channel_id": channel.id,
                 "source_id": channel.sourceId,
                 "source_type": String(describing: channel.sourceType),
-                "embedded_stream_url": channel.streamURL?.absoluteString ?? "none"
+                "embedded_stream_url": channel.streamURL == nil ? "none" : SensitiveDataRedactor.redactedURLValue
             ]
             SentrySDK.addBreadcrumb(breadcrumb)
         }

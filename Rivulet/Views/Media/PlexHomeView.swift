@@ -15,7 +15,9 @@ struct PlexHomeView: View {
     @StateObject private var dataStore = PlexDataStore.shared
     @StateObject private var authManager = PlexAuthManager.shared
     @StateObject private var watchlistService = PlexWatchlistService.shared
-    @AppStorage("showHomeHero") private var showHomeHero = false
+    // E2-PR4: hero is the canonical, default Home experience (hero-first).
+    // Remains a user-overridable preference; only the default flips to on.
+    @AppStorage("showHomeHero") private var showHomeHero = true
     @AppStorage("enablePersonalizedRecommendations") private var enablePersonalizedRecommendations = false
     @Environment(\.nestedNavigationState) private var nestedNavState
     @State private var selectedItem: MediaItem?
@@ -60,25 +62,23 @@ struct PlexHomeView: View {
     ///   `/hubs/continueWatching` endpoint, matching the Plex app exactly)
     /// - Other hubs come from library-specific endpoints with library name prefixes
     private func computeProcessedHubs(from hubsToProcess: [PlexHub]) -> [PlexHub] {
-        var result: [PlexHub] = []
-
-        if let hub = dataStore.continueWatchingHub, hub.Metadata?.isEmpty == false {
-            result.append(hub)
-        }
-
-        // Add "Recently Added" hub for each library shown on Home (video and music)
+        // "Recently Added" hub for each library shown on Home (video and music).
+        var followingRows: [PlexHub] = []
         for library in dataStore.librariesForHomeScreen {
             if let hubs = dataStore.libraryHubs[library.key] {
-                // Find the "Recently Added" hub for this library
                 if let recentlyAddedHub = hubs.first(where: { isRecentlyAddedHub($0) }) {
                     var transformedHub = recentlyAddedHub
                     transformedHub.title = "Recently Added \(library.title)"
-                    result.append(transformedHub)
+                    followingRows.append(transformedHub)
                 }
             }
         }
 
-        return result
+        // Continue Watching is always the most prominent content row (E2-PR5).
+        return HomeRowOrderingPolicy.order(
+            continueWatching: dataStore.continueWatchingHub,
+            followingRows: followingRows
+        )
     }
 
     /// Check if a hub is a Continue Watching or On Deck hub
@@ -125,19 +125,35 @@ struct PlexHomeView: View {
         }
     }
 
+    /// Resolved render state for the credentialed Home path. Not-connected is
+    /// handled separately below (auth is an Epic 1 boundary) and is intentionally
+    /// not part of this content render-state model.
+    private var homeRenderState: RenderState<[PlexHub]> {
+        RenderStateResolver.resolve(
+            isLoading: dataStore.isLoadingHubs,
+            content: dataStore.hubs.isEmpty ? nil : dataStore.hubs,
+            // E2-PR7: present calm, secret-free copy rather than a raw
+            // localizedDescription that could carry a token-bearing URL.
+            errorMessage: dataStore.hubsError.map { HomeErrorPresentation.userFacingMessage(for: $0) }
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 if !authManager.hasCredentials {
                     notConnectedView
-                } else if dataStore.isLoadingHubs && dataStore.hubs.isEmpty {
-                    loadingView
-                } else if let error = dataStore.hubsError, dataStore.hubs.isEmpty {
-                    errorView(error)
-                } else if dataStore.hubs.isEmpty {
-                    emptyView
                 } else {
-                    contentView
+                    // Shared render-state surface (E2-PR1). Default empty/error
+                    // presentations replicate the prior inline views; both retry
+                    // through refreshHubs, matching legacy behavior. No redesign.
+                    ContentStateView(
+                        phase: homeRenderState.phase,
+                        errorMessage: homeRenderState.errorMessage,
+                        onRetry: { Task { await dataStore.refreshHubs() } }
+                    ) {
+                        contentView
+                    }
                 }
             }
             .refreshable {
@@ -149,6 +165,11 @@ struct PlexHomeView: View {
             }
             .onAppear {
                 homeLog.info("PlexHomeView onAppear — cachedHubs=\(self.cachedProcessedHubs.count), dataStoreHubs=\(self.dataStore.hubs.count)")
+                // Initial render state never fires .onChange, so open the
+                // data-load interval here when we appear mid-load.
+                if homeRenderState.phase == .loading {
+                    HomePerformance.tracer.beginHomeDataLoad()
+                }
                 // Initial computation of processed hubs
                 if cachedProcessedHubs.isEmpty && !dataStore.hubs.isEmpty {
                     cachedProcessedHubs = computeProcessedHubs(from: dataStore.hubs)
@@ -178,6 +199,15 @@ struct PlexHomeView: View {
                 // resolve TMDB ids against library content.
                 Task { await upgradeHeroFromTMDB() }
             }
+            .onChange(of: homeRenderState.phase) { oldPhase, newPhase in
+                // PERF: render-state transition + home-data-load span.
+                HomePerformance.tracer.recordRenderStateTransition(from: oldPhase, to: newPhase)
+                if newPhase == .loading {
+                    HomePerformance.tracer.beginHomeDataLoad()
+                } else if oldPhase == .loading {
+                    HomePerformance.tracer.endHomeDataLoad()
+                }
+            }
             .onChange(of: dataStore.hubsVersion) { _, _ in
                 // Recompute cached hubs when global hub data changes (for Continue Watching)
                 cachedProcessedHubs = computeProcessedHubs(from: dataStore.hubs)
@@ -196,6 +226,9 @@ struct PlexHomeView: View {
             .onChange(of: cachedProcessedHubs.isEmpty) { _, isEmpty in
                 homeLog.info("cachedProcessedHubs.isEmpty changed to \(isEmpty) (count: \(self.cachedProcessedHubs.count))")
                 dataStore.isHomeContentReady = !isEmpty
+                if !isEmpty {
+                    HomePerformance.tracer.markHomeComplete()
+                }
             }
             .onChange(of: enablePersonalizedRecommendations) { _, _ in
                 handleRecommendationsToggle()
@@ -452,6 +485,9 @@ struct PlexHomeView: View {
     /// (cache or Recently Added) so the UI never sits empty, then upgrades to
     /// TMDB-curated picks once that fetch + library lookup completes.
     private func selectHeroItems() {
+        // PERF-003 hero preparation window. Captured even while the hero is
+        // flag-gated off (showHomeHero), so the budget is measurable on enable.
+        HomePerformance.tracer.beginHeroPreparation()
         // 1) Cached result wins on cold launch — feels instant.
         if heroItems.isEmpty,
            let cached = dataStore.getCachedHeroItems(forLibrary: "home"),
@@ -468,6 +504,10 @@ struct PlexHomeView: View {
                 dataStore.cacheHeroItems(candidates, forLibrary: "home")
             }
         }
+
+        // Initial hero (cache or hub-backed) is now ready; the TMDB pass below
+        // is an async enhancement, not part of the readiness budget.
+        HomePerformance.tracer.endHeroPreparation()
 
         // 3) Try to upgrade to a TMDB-curated set in the background.
         Task { await upgradeHeroFromTMDB() }
@@ -572,32 +612,30 @@ struct PlexHomeView: View {
         let allIdentifiers = hubs.compactMap { $0.hubIdentifier }.joined(separator: ", ")
         homeLog.debug("[Hero] available hubs: \(allIdentifiers, privacy: .public)")
 
-        // Some servers expose a curated hub even without Plex Pass — keep
-        // matching it as a higher-priority fallback than Recently Added.
+        // Map each hub to its hero role, then apply the deterministic priority
+        // (Continue Watching > curated/featured > recently added > other) from
+        // `HeroSelectionPolicy`. Hub order is preserved so ties are stable.
         let curatedKeywords = ["recommended", "promoted", "featured", "spotlight"]
-        let curated = hubs.first { hub in
-            guard let id = hub.hubIdentifier?.lowercased(),
-                  hub.Metadata?.isEmpty == false else { return false }
-            return curatedKeywords.contains(where: id.contains)
-        }
-        if let items = curated?.Metadata, !items.isEmpty {
-            homeLog.info("[Hero] Using curated hub \(curated?.hubIdentifier ?? "?", privacy: .public) with \(items.count) items")
-            return Array(items.prefix(Self.heroItemCap)).filter { $0.ratingKey != nil }
-        }
-
-        let recentlyAdded = hubs.first { isRecentlyAddedHub($0) && ($0.Metadata?.isEmpty == false) }
-        if let items = recentlyAdded?.Metadata, !items.isEmpty {
-            homeLog.info("[Hero] Fallback to Recently Added hub with \(items.count) items")
-            return Array(items.prefix(Self.heroItemCap)).filter { $0.ratingKey != nil }
-        }
-
-        if let firstHub = hubs.first(where: { $0.Metadata?.isEmpty == false }),
-           let items = firstHub.Metadata, !items.isEmpty {
-            homeLog.info("[Hero] Fallback to first non-empty hub \(firstHub.hubIdentifier ?? "?", privacy: .public)")
-            return Array(items.prefix(Self.heroItemCap)).filter { $0.ratingKey != nil }
+        let candidates: [HeroHubCandidate] = hubs.map { hub in
+            let id = hub.hubIdentifier?.lowercased() ?? ""
+            let kind: HeroHubKind
+            if isContinueWatchingHub(hub) {
+                kind = .continueWatching
+            } else if curatedKeywords.contains(where: id.contains) {
+                kind = .curated
+            } else if isRecentlyAddedHub(hub) {
+                kind = .recentlyAdded
+            } else {
+                kind = .other
+            }
+            return HeroHubCandidate(kind: kind, identifier: hub.hubIdentifier, items: hub.Metadata ?? [])
         }
 
-        return []
+        let selected = HeroSelectionPolicy.select(from: candidates, cap: Self.heroItemCap)
+        if !selected.isEmpty {
+            homeLog.info("[Hero] Selected \(selected.count) items via HeroSelectionPolicy")
+        }
+        return selected
     }
 
     // MARK: - Recommendations
@@ -704,7 +742,15 @@ struct PlexHomeView: View {
                                     scrollProxy.scrollTo("homeHero", anchor: .top)
                                 }
                             },
-                            onHeroExited: nil
+                            onHeroExited: nil,
+                            // Pause auto-rotation while a detail/preview/player/
+                            // resume surface is presented — the hero must not
+                            // rotate behind it.
+                            autoRotationEnabled: selectedItem == nil
+                                && selectedMusicItem == nil
+                                && rowPreviewRequest == nil
+                                && !showPreviewCover
+                                && !showResumeChoice
                         )
                         .frame(height: heroSectionHeight)
                         .focusSection()
@@ -731,6 +777,10 @@ struct PlexHomeView: View {
                                     serverURL: authManager.selectedServerURL ?? "",
                                     authToken: authManager.selectedServerToken ?? "",
                                     isContinueWatching: isContinueWatching,
+                                    // ADO-02: Recently Added rows use poster→landscape-on-focus
+                                    // (poster at rest, landscape composition on focus); all
+                                    // other rows keep the plain poster card.
+                                    cardStyle: isRecentlyAddedHub(hub) ? .landscape : .poster,
                                     contextMenuSource: isContinueWatching ? .continueWatching : .other,
                                     onItemSelected: { item in selectItem(item) },
                                     onPlayItem: { item in
@@ -813,7 +863,7 @@ struct PlexHomeView: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(.white)
 
-                Text(authManager.connectionError ?? "Showing cached content")
+                Text(authManager.connectionError.map { HomeErrorPresentation.userFacingMessage(for: $0) } ?? "Showing cached content")
                     .font(.system(size: 16))
                     .foregroundStyle(.white.opacity(0.7))
             }
@@ -845,20 +895,6 @@ struct PlexHomeView: View {
         .padding(.bottom, 20)
     }
 
-    // MARK: - Loading View
-
-    private var loadingView: some View {
-        VStack(spacing: 24) {
-            ProgressView()
-                .scaleEffect(1.5)
-            Text("Loading")
-                .font(.title3)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
     // MARK: - Recommendations Section
 
     @ViewBuilder
@@ -885,7 +921,7 @@ struct PlexHomeView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Personalized Recommendations Unavailable")
                         .font(.system(size: 20, weight: .semibold))
-                    Text(error)
+                    Text(HomeErrorPresentation.userFacingMessage(for: error))
                         .font(.system(size: 16))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -919,62 +955,6 @@ struct PlexHomeView: View {
                 restorePreviewFocusTarget: $previewRestoreTarget
             )
         }
-    }
-
-    // MARK: - Error View
-
-    private func errorView(_ error: String) -> some View {
-        VStack(spacing: 24) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 48, weight: .light))
-                .foregroundStyle(.secondary)
-
-            Text("Unable to Load")
-                .font(.title2)
-                .fontWeight(.medium)
-
-            Text(error)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 400)
-
-            Button {
-                Task { await dataStore.refreshHubs() }
-            } label: {
-                Text("Try Again")
-                    .fontWeight(.medium)
-            }
-            .buttonStyle(AppStoreButtonStyle())
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    // MARK: - Empty View
-
-    private var emptyView: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "film.stack")
-                .font(.system(size: 48, weight: .light))
-                .foregroundStyle(.secondary)
-
-            Text("No Content")
-                .font(.title2)
-                .fontWeight(.medium)
-
-            Text("Your Plex library appears to be empty.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-
-            Button {
-                Task { await dataStore.refreshHubs() }
-            } label: {
-                Text("Refresh")
-                    .fontWeight(.medium)
-            }
-            .buttonStyle(AppStoreButtonStyle())
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Not Connected View
@@ -1192,6 +1172,9 @@ struct InfiniteContentRow: View {
     let serverURL: String
     let authToken: String
     var isContinueWatching: Bool = false
+    /// ADO-02: card visual style for this row. Default `.poster` preserves the
+    /// existing `MediaPosterCard`; `.landscape` renders `LandscapeContentCard`.
+    var cardStyle: ContentPresentationStyle = .poster
     var contextMenuSource: MediaItemContextSource = .other
     var onItemSelected: ((PlexMetadata) -> Void)?
     var onPlayItem: ((PlexMetadata) -> Void)?
@@ -1306,11 +1289,20 @@ struct InfiniteContentRow: View {
                                     authToken: authToken,
                                     isFocused: focusedItemId == focusId(for: item)
                                 )
-                            } else {
+                            } else if cardStyle == .poster {
                                 MediaPosterCard(
                                     item: item,
                                     serverURL: serverURL,
                                     authToken: authToken
+                                )
+                            } else {
+                                // Landscape shelf card visual; the wrapping
+                                // Button still owns selection/preview/focus.
+                                LandscapeContentCard(
+                                    model: PlexContentCardMapper.model(
+                                        from: item, serverURL: serverURL, authToken: authToken
+                                    ),
+                                    isFocused: focusedItemId == focusId(for: item)
                                 )
                             }
                         }
@@ -1363,16 +1355,16 @@ struct InfiniteContentRow: View {
             let savedFocusId = focusedItemId
             items = initialItems
             hasReachedEnd = false
-            // Restore focus after items reset to prevent focus loss (e.g., after marking watched)
-            if let savedFocusId {
-                let parts = savedFocusId.split(separator: ":", maxSplits: 1)
-                let savedKey = parts.count == 2 ? String(parts[1]) : nil
-                if let savedKey, items.contains(where: { $0.ratingKey == savedKey }) {
-                    // Must nil first then restore async — SwiftUI ignores setting the same value
-                    focusedItemId = nil
-                    DispatchQueue.main.async {
-                        focusedItemId = savedFocusId
-                    }
+            // Restore focus after items reset to prevent focus loss (e.g., after
+            // marking watched), but only when the previously-focused item still
+            // exists — never strand focus on a vanished item (E2-PR3). Compares
+            // full focus identities so rowIDs containing ":" are handled safely.
+            let validFocusIDs = Set(items.map { focusId(for: $0) })
+            if let restore = FocusRestorationPolicy.restoredFocusID(saved: savedFocusId, validFocusIDs: validFocusIDs) {
+                // Must nil first then restore async — SwiftUI ignores setting the same value
+                focusedItemId = nil
+                DispatchQueue.main.async {
+                    focusedItemId = restore
                 }
             }
         }

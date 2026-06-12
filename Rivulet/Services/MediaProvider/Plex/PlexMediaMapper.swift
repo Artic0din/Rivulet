@@ -216,6 +216,9 @@ enum PlexMediaMapper {
             grandparentRef: grandparentRef,
             episodeNumber: episodeNumber,
             seasonNumber: seasonNumber,
+            // Original air date (episode-card content-status label, ADO-05).
+            // Parsed to a UTC calendar day; nil when Plex omits it. No new fetch.
+            airDate: ContentStatusPolicy.parseAirDate(meta.originallyAvailableAt),
             childProgress: childProgress,
             userState: userState(meta),
             artwork: artwork(meta, serverURL: serverURL, authToken: authToken),
@@ -333,7 +336,8 @@ enum PlexMediaMapper {
             contentRating: meta.contentRating,
             rating: meta.rating,
             nextEpisode: nextEpisode,
-            collections: collections
+            collections: collections,
+            tmdbId: meta.tmdbId
         )
     }
 

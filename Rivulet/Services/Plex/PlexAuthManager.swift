@@ -36,6 +36,47 @@ enum PlexAuthState: Equatable {
     }
 }
 
+// MARK: - Credential Lifecycle Policy
+
+enum PlexCredentialRole: Equatable, Sendable {
+    case account
+    case selectedServer
+    case homeUser
+}
+
+struct PlexCredentialLifecyclePolicy: Sendable {
+    static func shouldInvalidateCredentials(for error: Error) -> Bool {
+        guard let plexError = error as? PlexAPIError else { return false }
+
+        switch plexError {
+        case .authenticationFailed:
+            return true
+        case .httpError(let statusCode, _):
+            return statusCode == 401 || statusCode == 403
+        default:
+            return false
+        }
+    }
+
+    static func userFacingInvalidationMessage(
+        role _: PlexCredentialRole,
+        diagnostic _: String? = nil
+    ) -> String {
+        "Your Plex session expired. Please sign in again."
+    }
+
+    static func diagnosticReason(for role: PlexCredentialRole) -> String {
+        switch role {
+        case .account:
+            return "account token rejected"
+        case .selectedServer:
+            return "selected server token rejected"
+        case .homeUser:
+            return "Plex Home user token rejected"
+        }
+    }
+}
+
 // MARK: - Auth Manager
 
 @MainActor
@@ -72,6 +113,7 @@ class PlexAuthManager: ObservableObject {
     private let usernameKey = "plexUsername"
     private let serverURLKey = "selectedServerURL"
     private let serverNameKey = "selectedServerName"
+    private let serverIdentifierKey = "selectedServerIdentifier"
     /// Sentinel set after a successful auth. Used to detect fresh installs —
     /// UserDefaults is wiped on app uninstall but Keychain persists, so if this
     /// flag is missing while the Keychain still has tokens, the Keychain data
@@ -163,7 +205,8 @@ class PlexAuthManager: ObservableObject {
             state = .waitingForPIN(code: pinCode, pinId: pinId)
             startPollingForAuth(pinId: pinId)
         } catch {
-            state = .error(message: "Failed to get PIN: \(error.localizedDescription)")
+            let safeError = SensitiveDataRedactor.redact(error.localizedDescription) ?? "Unknown error"
+            state = .error(message: "Failed to get PIN: \(safeError)")
             scheduleErrorDismissal()
 
             // Capture PIN request failure to Sentry
@@ -207,6 +250,7 @@ class PlexAuthManager: ObservableObject {
                 selectedServerURL = workingURL
                 userDefaults.set(selectedServerURL, forKey: serverURLKey)
                 userDefaults.set(server.name, forKey: serverNameKey)
+                userDefaults.set(PlexServerSelectionPolicy.stableServerIdentifier(for: server), forKey: serverIdentifierKey)
 
                 // Save the correct token for this server (securely in Keychain)
                 // For shared servers, use server-specific accessToken; for owned, use user's authToken
@@ -215,8 +259,7 @@ class PlexAuthManager: ObservableObject {
                 if let token = tokenForServer {
                     KeychainHelper.set(token, forKey: keychainServerTokenKey)
                 }
-
-                let isShared = server.owned == false
+                await registerSelectedServerCredential(server, token: tokenForServer)
 
                 isConnected = true
                 connectionError = nil
@@ -248,19 +291,10 @@ class PlexAuthManager: ObservableObject {
     /// - If httpsRequired=false + local: HTTP (fastest) > plex.direct
     /// - Remote: current behavior (plex.direct URLs from API)
     private func findBestConnection(for server: PlexDevice) async -> String? {
-        let validConnections = (server.connections ?? [])
-            .filter { !isDockerOrInternalAddress($0.address) }
-
-        // Sort by preference: local non-relay > remote > relay
-        let sortedConnections = validConnections.sorted { conn1, conn2 in
-            let score1 = connectionScore(conn1)
-            let score2 = connectionScore(conn2)
-            return score1 > score2
-        }
+        let sortedConnections = PlexServerSelectionPolicy.orderedConnections(server.connections ?? [])
 
         // For shared servers (not owned by user), use server-specific accessToken
         let tokenToUse = server.accessToken
-        let isShared = server.owned == false
         let httpsRequired = server.httpsRequired == true
 
         // If server requires HTTPS and we have a machineIdentifier, try plex.direct FIRST
@@ -285,7 +319,7 @@ class PlexAuthManager: ObservableObject {
             if await testConnection(connection.uri, serverToken: tokenToUse) {
                 return connection.uri
             } else {
-                print("🔐 PlexAuthManager: ❌ Connection failed: \(connection.uri)")
+                print("🔐 PlexAuthManager: ❌ Connection failed: \(SensitiveDataRedactor.redact(connection.uri) ?? SensitiveDataRedactor.redactedURLValue)")
 
                 // If HTTP failed, try HTTPS fallback
                 // This handles "Require Secure Connections" setting on Plex servers
@@ -301,14 +335,14 @@ class PlexAuthManager: ObservableObject {
                         if await testConnection(plexDirectURI, serverToken: tokenToUse) {
                             return plexDirectURI
                         } else {
-                            print("🔐 PlexAuthManager: ❌ plex.direct failed: \(plexDirectURI)")
+                            print("🔐 PlexAuthManager: ❌ plex.direct failed: \(SensitiveDataRedactor.redact(plexDirectURI) ?? SensitiveDataRedactor.redactedURLValue)")
                         }
                     }
 
                     // Try raw HTTPS as last resort for this connection.
                     // API calls can trust self-signed certs, but media playback should prefer a valid TLS endpoint.
                     let httpsURI = connection.uri.replacingOccurrences(of: "http://", with: "https://")
-                    print("🔐 PlexAuthManager: Trying HTTPS fallback: \(httpsURI)...")
+                    print("🔐 PlexAuthManager: Trying HTTPS fallback: \(SensitiveDataRedactor.redact(httpsURI) ?? SensitiveDataRedactor.redactedURLValue)...")
                     let (success, certHash) = await testConnectionWithCertExtraction(httpsURI, serverToken: tokenToUse)
                     if success {
                         // If we have a cert hash, prefer plex.direct for playback compatibility
@@ -323,10 +357,10 @@ class PlexAuthManager: ObservableObject {
                             }
                         }
                         // Fall back to raw HTTPS if plex.direct failed
-                        print("🔐 PlexAuthManager: ✅ HTTPS fallback works: \(httpsURI)")
+                        print("🔐 PlexAuthManager: ✅ HTTPS fallback works: \(SensitiveDataRedactor.redact(httpsURI) ?? SensitiveDataRedactor.redactedURLValue)")
                         return httpsURI
                     } else {
-                        print("🔐 PlexAuthManager: ❌ HTTPS fallback failed: \(httpsURI)")
+                        print("🔐 PlexAuthManager: ❌ HTTPS fallback failed: \(SensitiveDataRedactor.redact(httpsURI) ?? SensitiveDataRedactor.redactedURLValue)")
 
                         // If we extracted a plex.direct hash from the certificate error, try that
                         if let hash = certHash {
@@ -338,7 +372,7 @@ class PlexAuthManager: ObservableObject {
                             if await testConnection(plexDirectURI, serverToken: tokenToUse) {
                                 return plexDirectURI
                             } else {
-                                print("🔐 PlexAuthManager: ❌ plex.direct failed: \(plexDirectURI)")
+                                print("🔐 PlexAuthManager: ❌ plex.direct failed: \(SensitiveDataRedactor.redact(plexDirectURI) ?? SensitiveDataRedactor.redactedURLValue)")
                             }
                         }
                     }
@@ -348,7 +382,7 @@ class PlexAuthManager: ObservableObject {
 
         // If all filtered connections fail, try relay as last resort
         if let relayConnection = server.connections?.first(where: { $0.relay }) {
-            print("🔐 PlexAuthManager: Trying relay as fallback: \(relayConnection.uri)")
+            print("🔐 PlexAuthManager: Trying relay as fallback: \(SensitiveDataRedactor.redact(relayConnection.uri) ?? SensitiveDataRedactor.redactedURLValue)")
             if await testConnection(relayConnection.uri, serverToken: tokenToUse) {
                 return relayConnection.uri
             }
@@ -363,58 +397,19 @@ class PlexAuthManager: ObservableObject {
     /// - Local prefers HTTP (fastest when secure connections not required)
     /// - For httpsRequired servers, plex.direct is tried first (valid TLS for playback)
     private func connectionScore(_ connection: PlexConnection) -> Int {
-        var score = 0
-
-        // Prefer non-relay (direct connections)
-        if !connection.relay { score += 1000 }
-
-        // Prefer local connections
-        if connection.local {
-            score += 500
-            // For local: prefer HTTP (avoids certificate issues)
-            if connection.protocolType == "http" { score += 50 }
-        } else {
-            // For remote: prefer HTTPS (required by ATS)
-            if connection.protocolType == "https" { score += 100 }
-            // plex.direct domains are reliable for remote access
-            if connection.address.contains(".plex.direct") { score += 50 }
-        }
-
-        return score
+        PlexServerSelectionPolicy.connectionScore(connection)
     }
 
     /// Build a plex.direct URL for secure remote access
     /// Plex issues SSL certificates for *.plex.direct domains
     /// Format: https://<ip-with-dashes>.<machineIdentifier>.plex.direct:<port>
     private func buildPlexDirectURL(address: String, port: Int, machineIdentifier: String) -> String {
-        let ipWithDashes = address.replacingOccurrences(of: ".", with: "-")
-        return "https://\(ipWithDashes).\(machineIdentifier).plex.direct:\(port)"
+        PlexServerSelectionPolicy.buildPlexDirectURL(address: address, port: port, machineIdentifier: machineIdentifier)
     }
 
     /// Check if address is a Docker/internal bridge network
     private func isDockerOrInternalAddress(_ address: String) -> Bool {
-        // Docker default bridge networks (172.17-31.x.x range)
-        // Note: We intentionally do NOT filter 10.x.x.x as these are common home network ranges
-        let dockerPrefixes = [
-            "172.17.", "172.18.", "172.19.", "172.20.", "172.21.",
-            "172.22.", "172.23.", "172.24.", "172.25.", "172.26.",
-            "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
-        ]
-
-        // Localhost variants (not useful for Apple TV)
-        let localhostAddresses = ["127.0.0.1", "localhost", "::1"]
-
-        for prefix in dockerPrefixes {
-            if address.hasPrefix(prefix) {
-                return true
-            }
-        }
-
-        if localhostAddresses.contains(address) {
-            return true
-        }
-
-        return false
+        PlexServerSelectionPolicy.isDockerOrInternalAddress(address)
     }
 
     /// Test if a connection URL is reachable
@@ -449,7 +444,7 @@ class PlexAuthManager: ObservableObject {
             }
             return false
         } catch {
-            print("🔐 PlexAuthManager: Connection test error: \(error.localizedDescription)")
+            print("🔐 PlexAuthManager: Connection test error: \(SensitiveDataRedactor.redact(error.localizedDescription) ?? "")")
             return false
         }
     }
@@ -483,7 +478,7 @@ class PlexAuthManager: ObservableObject {
             }
             return (false, nil)
         } catch {
-            print("🔐 PlexAuthManager: Connection test error: \(error.localizedDescription)")
+            print("🔐 PlexAuthManager: Connection test error: \(SensitiveDataRedactor.redact(error.localizedDescription) ?? "")")
 
             // Try to extract plex.direct hash from certificate error
             let nsError = error as NSError
@@ -519,16 +514,30 @@ class PlexAuthManager: ObservableObject {
 
     /// Sign out and clear credentials
     func signOut() {
+        clearPersistedCredentials(
+            connectionResetValue: true,
+            connectionMessage: nil,
+            resultingState: .idle
+        )
+    }
+
+    private func clearPersistedCredentials(
+        connectionResetValue: Bool,
+        connectionMessage: String?,
+        resultingState: PlexAuthState
+    ) {
         pollingTask?.cancel()
         pollingTask = nil
+        serverSelectionTask?.cancel()
+        serverSelectionTask = nil
 
         authToken = nil
         username = nil
         selectedServer = nil
         selectedServerURL = nil
         selectedServerToken = nil
-        isConnected = true  // Reset to default
-        connectionError = nil
+        isConnected = connectionResetValue
+        connectionError = connectionMessage
 
         // Clear tokens from Keychain (secure storage)
         KeychainHelper.delete(keychainTokenKey)
@@ -538,6 +547,7 @@ class PlexAuthManager: ObservableObject {
         userDefaults.removeObject(forKey: usernameKey)
         userDefaults.removeObject(forKey: serverURLKey)
         userDefaults.removeObject(forKey: serverNameKey)
+        userDefaults.removeObject(forKey: serverIdentifierKey)
         userDefaults.removeObject(forKey: hasPersistedSessionKey)
 
         // Clear any legacy tokens that might still exist
@@ -546,6 +556,7 @@ class PlexAuthManager: ObservableObject {
 
         // Clear user profile selection
         PlexUserProfileManager.shared.reset()
+        CredentialRegistry.shared.clearRegisteredCredentials()
 
         // Clear cached library / hub / metadata content from the previous
         // session. Without this, after a sign-out + sign-in to a different
@@ -556,7 +567,19 @@ class PlexAuthManager: ObservableObject {
         // previous server's content.
         PlexDataStore.shared.reset()
 
-        state = .idle
+        state = resultingState
+    }
+
+    private func clearInvalidCredentials(role: PlexCredentialRole) {
+        let message = PlexCredentialLifecyclePolicy.userFacingInvalidationMessage(role: role)
+        print("🔐 PlexAuthManager: Clearing invalid credentials (\(PlexCredentialLifecyclePolicy.diagnosticReason(for: role)))")
+
+        clearPersistedCredentials(
+            connectionResetValue: false,
+            connectionMessage: message,
+            resultingState: .error(message: message)
+        )
+        scheduleErrorDismissal()
     }
 
     /// Reset error state
@@ -567,11 +590,35 @@ class PlexAuthManager: ObservableObject {
     }
 
     /// Update the server token for user profile switching
-    /// This is called when switching Plex Home users to use their specific token
+    /// This is called when switching Plex Home users to use their specific token.
+    /// Plex Home server tokens remain session-scoped by design; remembered
+    /// PINs are the persisted credential used to restore protected profiles.
     func updateServerToken(_ token: String) {
         selectedServerToken = token
-        // Note: We don't persist this to UserDefaults since it's session-specific
-        // On next app launch, we'll fetch users again and switch if needed
+        // Do not persist Home user tokens in UserDefaults. On next launch the
+        // app fetches Home users again and revalidates the selected profile.
+    }
+
+    /// Apply a Plex Home user's server-scoped token without replacing the
+    /// account token or base selected-server credential.
+    func applyHomeUserServerToken(_ token: String, for user: PlexHomeUser) async {
+        selectedServerToken = token
+
+        guard let selectedServer else {
+            print("🔐 PlexAuthManager: No selected server available for Plex Home user credential registration")
+            return
+        }
+
+        let providerID = providerID(for: selectedServer)
+        CredentialRegistry.shared.registerServer(
+            ServerCredential(
+                id: providerID,
+                displayName: selectedServer.name,
+                userID: user.uuid,
+                kind: .plex
+            )
+        )
+        try? await CredentialRegistry.shared.setToken(token, for: .serverUser(providerID: providerID, userID: user.uuid))
     }
 
     /// Check if currently authenticated (has valid credentials)
@@ -587,6 +634,10 @@ class PlexAuthManager: ObservableObject {
     /// Get saved server name
     var savedServerName: String? {
         userDefaults.string(forKey: serverNameKey)
+    }
+
+    var savedServerIdentifier: String? {
+        userDefaults.string(forKey: serverIdentifierKey)
     }
 
     /// Verify current connection and re-select if needed
@@ -605,7 +656,12 @@ class PlexAuthManager: ObservableObject {
                     state = .selectingServer(servers: servers)
                 }
             } catch {
-                print("🔐 PlexAuthManager: Failed to fetch servers: \(error)")
+                if PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: error) {
+                    clearInvalidCredentials(role: .account)
+                    return
+                }
+
+                print("🔐 PlexAuthManager: Failed to fetch servers: \(SensitiveDataRedactor.redact(String(describing: error)) ?? "")")
                 isConnected = false
                 connectionError = "Unable to reach Plex. Check your network connection."
 
@@ -637,28 +693,27 @@ class PlexAuthManager: ObservableObject {
             // Try to find a better connection without clearing credentials
             // This allows cached content to still be shown.
             //
-            // Match the saved server by URL first, then by saved name as a
-            // fallback (Plex occasionally rotates a server's connection
-            // URIs, which breaks URL-matching while the name stays stable).
-            // If neither identifies the saved server, leave selection alone
-            // — the prior `?? servers.first` fallback silently swapped users
-            // to whichever server happened to be first in the account's
-            // server list, which on a multi-server account (e.g. own + shared)
-            // could pull them onto the wrong server entirely.
+            // Match the saved server by stable identifier first, URL second,
+            // and display name only if the name is unique. Plex can rotate
+            // connection URIs and users can have duplicate server names, so
+            // falling back to the first name match can silently select the
+            // wrong server on multi-server accounts.
             do {
                 let servers = try await networkManager.getServers(authToken: token)
-                let savedName = savedServerName
-                let matchedServer = servers.first(where: { server in
-                    server.connections?.contains { $0.uri == currentURL } == true
-                }) ?? (savedName.flatMap { name in
-                    servers.first(where: { $0.name == name })
-                })
+                let matchedServer = PlexServerSelectionPolicy.matchingServer(
+                    in: servers,
+                    savedIdentifier: savedServerIdentifier,
+                    savedURL: currentURL,
+                    savedName: savedServerName
+                )
                 if let currentServer = matchedServer {
                     // Try to find a working connection on this server
                     if let workingURL = await findBestConnection(for: currentServer) {
+                        selectedServer = currentServer
                         selectedServerURL = workingURL
                         userDefaults.set(selectedServerURL, forKey: serverURLKey)
                         userDefaults.set(currentServer.name, forKey: serverNameKey)
+                        userDefaults.set(PlexServerSelectionPolicy.stableServerIdentifier(for: currentServer), forKey: serverIdentifierKey)
 
                         // Update server token for new server (securely in Keychain)
                         let tokenForServer = currentServer.accessToken ?? authToken
@@ -666,6 +721,7 @@ class PlexAuthManager: ObservableObject {
                         if let newToken = tokenForServer {
                             KeychainHelper.set(newToken, forKey: keychainServerTokenKey)
                         }
+                        await registerSelectedServerCredential(currentServer, token: tokenForServer)
 
                         isConnected = true
                         connectionError = nil
@@ -673,7 +729,12 @@ class PlexAuthManager: ObservableObject {
                     }
                 }
             } catch {
-                print("🔐 PlexAuthManager: Failed to fetch servers for re-selection: \(error)")
+                if PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: error) {
+                    clearInvalidCredentials(role: .account)
+                    return
+                }
+
+                print("🔐 PlexAuthManager: Failed to fetch servers for re-selection: \(SensitiveDataRedactor.redact(String(describing: error)) ?? "")")
                 // Keep existing credentials - just mark as not connected
                 // User can still see cached content
 
@@ -681,13 +742,34 @@ class PlexAuthManager: ObservableObject {
                 SentrySDK.capture(error: error) { scope in
                     scope.setTag(value: "plex_auth", key: "component")
                     scope.setTag(value: "connection_verify", key: "auth_step")
-                    scope.setExtra(value: currentURL, key: "failed_url")
+                    scope.setExtra(value: SensitiveDataRedactor.redactedURLValue, key: "failed_url")
                 }
             }
         }
     }
 
     // MARK: - Private Methods
+
+    private func providerID(for server: PlexDevice) -> String {
+        PlexServerSelectionPolicy.providerID(for: server)
+    }
+
+    private func registerSelectedServerCredential(_ server: PlexDevice, token: String?) async {
+        let providerID = providerID(for: server)
+        let userID = PlexUserProfileManager.shared.selectedUser?.uuid ?? "account"
+
+        CredentialRegistry.shared.registerServer(
+            ServerCredential(
+                id: providerID,
+                displayName: server.name,
+                userID: userID,
+                kind: .plex
+            )
+        )
+
+        guard let token else { return }
+        try? await CredentialRegistry.shared.setToken(token, for: .server(providerID: providerID))
+    }
 
     private func startPollingForAuth(pinId: Int) {
         pollingTask?.cancel()
@@ -709,7 +791,8 @@ class PlexAuthManager: ObservableObject {
                     attempts += 1
                 } catch {
                     if !Task.isCancelled {
-                        state = .error(message: "Authentication check failed: \(error.localizedDescription)")
+                        let safeError = SensitiveDataRedactor.redact(error.localizedDescription) ?? "Unknown error"
+                        state = .error(message: "Authentication check failed: \(safeError)")
                         scheduleErrorDismissal()
                     }
                     return
@@ -751,7 +834,13 @@ class PlexAuthManager: ObservableObject {
                 state = .selectingServer(servers: servers)
             }
         } catch {
-            state = .error(message: "Failed to fetch servers: \(error.localizedDescription)")
+            if PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: error) {
+                clearInvalidCredentials(role: .account)
+                return
+            }
+
+            let safeError = SensitiveDataRedactor.redact(error.localizedDescription) ?? "Unknown error"
+            state = .error(message: "Failed to fetch servers: \(safeError)")
             scheduleErrorDismissal()
         }
     }
@@ -777,7 +866,7 @@ class PlexAuthManager: ObservableObject {
             }
         } catch {
             // Non-critical error, just log it
-            print("Failed to fetch user info: \(error)")
+            print("Failed to fetch user info: \(SensitiveDataRedactor.redact(String(describing: error)) ?? "")")
         }
     }
 
@@ -790,6 +879,8 @@ class PlexAuthManager: ObservableObject {
         }
     }
 }
+
+extension PlexAuthManager: PlexHomeAuthManaging {}
 
 // MARK: - Auth URL Helper
 

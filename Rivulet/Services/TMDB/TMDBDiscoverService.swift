@@ -127,6 +127,34 @@ actor TMDBDiscoverService {
         return detail
     }
 
+    /// Fetches the status/schedule slice (`status`, `next_episode_to_air`,
+    /// `seasons[]`, …) from the SAME `tmdb/details/{id}` payload used by
+    /// `fetchDetail` — no new endpoint. Used to build a `ContentStatusInput` for
+    /// the hero status label. Disk-cached separately; returns nil when the data
+    /// is unavailable (e.g. the backend proxy projects a subset — the caller
+    /// then simply shows no label). See `DEBT-E3-ADO03-001`.
+    func fetchStatusDetail(tmdbId: Int, type: TMDBMediaType) async -> TMDBStatusDetail? {
+        let cacheURL = statusCacheURL(tmdbId: tmdbId, type: type)
+        if let data = try? Data(contentsOf: cacheURL),
+           let cached = try? JSONDecoder().decode(TMDBStatusDetail.self, from: data) {
+            return cached
+        }
+
+        let endpoint = "tmdb/details/\(tmdbId)"
+        let queryItems = [URLQueryItem(name: "type", value: type.rawValue)]
+        guard let data = try? await fetchData(endpoint: endpoint, queryItems: queryItems),
+              let decoded = try? JSONDecoder().decode(TMDBStatusDetail.self, from: data) else {
+            return nil
+        }
+        // Cache the raw response bytes (the model is decode-only).
+        try? data.write(to: cacheURL)
+        return decoded
+    }
+
+    private func statusCacheURL(tmdbId: Int, type: TMDBMediaType) -> URL {
+        detailCacheDirectory.appendingPathComponent("status-\(type.rawValue)-\(tmdbId).json")
+    }
+
     // MARK: - Discover (For You)
 
     func discover(type: TMDBMediaType, withGenres: [Int], withKeywords: [Int]) async -> [TMDBListItem] {

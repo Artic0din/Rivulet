@@ -2,9 +2,11 @@
 //  NativePlayerViewController.swift
 //  Rivulet
 //
-//  Barebones AVPlayerViewController wrapper.
-//  Uses UniversalPlayerViewModel only for route/URL selection,
-//  then hands the AVPlayer to the system player UI.
+//  Native Apple-TV playback container. Hosts a child `AVPlayerViewController`
+//  via composition — Apple documents subclassing AVPlayerViewController as
+//  unsupported, so this is a plain UIViewController that owns and embeds one.
+//  Uses UniversalPlayerViewModel only for route/URL selection, then hands the
+//  AVPlayer to the system player UI.
 //
 //  AVPlayerViewController handles everything natively:
 //  - Transport controls (scrub bar, play/pause, skip)
@@ -12,13 +14,22 @@
 //  - AirPlay A/V sync
 //  - Audio session management
 //
+//  It also drives native "Up Next": the VM publishes an `AVContentProposal`,
+//  which we attach to the current item. When playback reaches the proposal's
+//  transition time, AVKit asks us (the delegate) to present it — we supply a
+//  `NextEpisodeProposalViewController` for the Apple-TV-style card. Accept (manual
+//  or auto) routes back through the VM so Plex headers/markers/progress survive.
+//
 
 import AVKit
 import Combine
+import UIKit
 
-class NativePlayerViewController: AVPlayerViewController {
+@MainActor
+final class NativePlayerViewController: UIViewController, AVPlayerViewControllerDelegate {
 
     private let viewModel: UniversalPlayerViewModel
+    private let avPlayerVC = AVPlayerViewController()
     private var cancellables = Set<AnyCancellable>()
     private var progressTimer: Timer?
     private var lastReportedTime: TimeInterval = -1
@@ -27,6 +38,9 @@ class NativePlayerViewController: AVPlayerViewController {
     init(viewModel: UniversalPlayerViewModel) {
         self.viewModel = viewModel
         super.init(nibName: nil, bundle: nil)
+        // Plain container needs an explicit full-screen style (the
+        // AVPlayerViewController subclass previously inherited this default).
+        modalPresentationStyle = .fullScreen
     }
 
     required init?(coder: NSCoder) {
@@ -35,14 +49,32 @@ class NativePlayerViewController: AVPlayerViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.backgroundColor = .black
 
-        // Observe when the VM creates its AVPlayer and hand it to the native UI
+        // Embed the native player as a child (composition, not subclassing).
+        addChild(avPlayerVC)
+        avPlayerVC.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(avPlayerVC.view)
+        NSLayoutConstraint.activate([
+            avPlayerVC.view.topAnchor.constraint(equalTo: view.topAnchor),
+            avPlayerVC.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            avPlayerVC.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            avPlayerVC.view.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        ])
+        avPlayerVC.didMove(toParent: self)
+        avPlayerVC.delegate = self
+
+        // Observe when the VM creates its AVPlayer and hand it to the native UI.
         viewModel.$player
             .compactMap { $0 }
             .first()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] avPlayer in
-                self?.player = avPlayer
+                guard let self else { return }
+                self.avPlayerVC.player = avPlayer
+                // Apply AFTER the player exists — AVKit resets infoViewActions
+                // when the item loads, so a viewDidLoad-time set gets wiped.
+                self.installInfoViewActions()
             }
             .store(in: &cancellables)
 
@@ -53,17 +85,76 @@ class NativePlayerViewController: AVPlayerViewController {
                 guard let self else { return }
                 if marker != nil {
                     let label = self.viewModel.skipButtonLabel
-                    self.contextualActions = [
+                    self.avPlayerVC.contextualActions = [
                         UIAction(title: label, image: UIImage(systemName: "forward.fill")) { [weak self] _ in
                             guard let self else { return }
                             Task { await self.viewModel.skipActiveMarker() }
                         }
                     ]
                 } else {
-                    self.contextualActions = []
+                    self.avPlayerVC.contextualActions = []
                 }
             }
             .store(in: &cancellables)
+
+        // Native "Up Next" — attach the VM's published proposal to the current item.
+        viewModel.$avContentProposal
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] proposal in
+                self?.avPlayerVC.player?.currentItem?.nextContentProposal = proposal
+            }
+            .store(in: &cancellables)
+
+        // Custom "Continue Watching" content tab in the info panel.
+        avPlayerVC.customInfoViewControllers = [
+            ContinueWatchingInfoViewController(viewModel: viewModel)
+        ]
+    }
+
+    /// Info tab actions: "From Beginning" + "Go to Movie/Show" (the reference
+    /// shows up to two actions on the Info tab's trailing edge).
+    private func installInfoViewActions() {
+        let fromBeginning = UIAction(title: "From Beginning",
+                                     image: UIImage(systemName: "play.fill")) { [weak self] _ in
+            self?.avPlayerVC.player?.seek(to: .zero)
+            self?.avPlayerVC.player?.play()
+        }
+        let isEpisode = viewModel.metadata.type == "episode"
+        let goTo = UIAction(title: isEpisode ? "Go to Show" : "Go to Movie",
+                            image: UIImage(systemName: "info.circle")) { [weak self] _ in
+            // Dismiss the player modal from its PRESENTER — calling dismiss() on
+            // self only closes AVKit's info panel. The presenter tears down the
+            // whole player; viewDidDisappear then fires onDismiss.
+            (self?.presentingViewController ?? self)?.dismiss(animated: true)
+        }
+        avPlayerVC.infoViewActions = [fromBeginning, goTo]
+    }
+
+    // MARK: - AVPlayerViewControllerDelegate (Up Next content proposals)
+
+    func playerViewController(_ playerViewController: AVPlayerViewController,
+                              shouldPresent proposal: AVContentProposal) -> Bool {
+        print("[UpNext] shouldPresent — presenting native card")
+        // AVKit has no built-in proposal UI; supply our Apple-TV-style card.
+        playerViewController.contentProposalViewController = NextEpisodeProposalViewController()
+        return true
+    }
+
+    func playerViewController(_ playerViewController: AVPlayerViewController,
+                              didAccept proposal: AVContentProposal) {
+        print("[UpNext] didAccept — advancing to next episode")
+        // Manual select AND auto-advance (automaticAcceptanceInterval) both land
+        // here, so this is the single advance path. Route through the VM so Plex
+        // headers/metadata/markers/progress are preserved.
+        Task { @MainActor in
+            await viewModel.playNextEpisode()
+        }
+    }
+
+    func playerViewController(_ playerViewController: AVPlayerViewController,
+                              didReject proposal: AVContentProposal) {
+        print("[UpNext] didReject")
+        viewModel.cancelAutoAdvanceProposal()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -99,7 +190,9 @@ class NativePlayerViewController: AVPlayerViewController {
 
     private func startProgressReporting() {
         progressTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            self?.reportCurrentProgress()
+            MainActor.assumeIsolated {
+                self?.reportCurrentProgress()
+            }
         }
     }
 

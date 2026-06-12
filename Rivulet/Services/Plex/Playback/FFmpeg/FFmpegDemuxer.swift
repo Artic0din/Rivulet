@@ -232,7 +232,11 @@ final class FFmpegDemuxer: @unchecked Sendable {
             localAVIOContext = avio
             ctx.pointee.pb = avio
             ctx.pointee.flags |= AVFMT_FLAG_CUSTOM_IO
-            playerDebugLog("[FFmpegDemuxer] Using URLSession-backed AVIO for \(url.absoluteString)")
+            // E4-PR1: log only the last path component — `absoluteString` carries
+            // the `X-Plex-Token` query (and host), and `playerDebugLog` is a live
+            // `print` in DEBUG/simulator. `lastPathComponent` identifies the asset
+            // without leaking the token, matching the rest of the pipeline.
+            playerDebugLog("[FFmpegDemuxer] Using URLSession-backed AVIO for \(url.lastPathComponent)")
         } else {
             if let headers = headers, !headers.isEmpty {
                 let headerString = headers.map { "\($0.key): \($0.value)" }.joined(separator: "\r\n")

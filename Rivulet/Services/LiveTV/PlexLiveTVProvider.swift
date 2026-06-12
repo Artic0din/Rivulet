@@ -107,7 +107,7 @@ actor PlexLiveTVProvider: LiveTVProvider {
             SentrySDK.capture(error: error) { scope in
                 scope.setTag(value: "plex_livetv", key: "component")
                 scope.setTag(value: "capability_check", key: "operation")
-                scope.setExtra(value: capturedServerURL, key: "server_url")
+                scope.setExtra(value: SensitiveDataRedactor.redact(capturedServerURL) ?? SensitiveDataRedactor.redactedURLValue, key: "server_url")
             }
             throw error
         }
@@ -141,7 +141,7 @@ actor PlexLiveTVProvider: LiveTVProvider {
             SentrySDK.capture(error: error) { scope in
                 scope.setTag(value: "plex_livetv", key: "component")
                 scope.setTag(value: "channel_fetch", key: "operation")
-                scope.setExtra(value: capturedServerURL, key: "server_url")
+                scope.setExtra(value: SensitiveDataRedactor.redact(capturedServerURL) ?? SensitiveDataRedactor.redactedURLValue, key: "server_url")
             }
             throw error
         }
@@ -211,7 +211,7 @@ actor PlexLiveTVProvider: LiveTVProvider {
             SentrySDK.capture(error: error) { scope in
                 scope.setTag(value: "plex_livetv", key: "component")
                 scope.setTag(value: "epg_fetch", key: "operation")
-                scope.setExtra(value: capturedServerURL, key: "server_url")
+                scope.setExtra(value: SensitiveDataRedactor.redact(capturedServerURL) ?? SensitiveDataRedactor.redactedURLValue, key: "server_url")
                 scope.setExtra(value: capturedChannelCount, key: "channel_count")
             }
             throw error

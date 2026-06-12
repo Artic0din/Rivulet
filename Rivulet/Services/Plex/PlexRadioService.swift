@@ -61,8 +61,7 @@ final class PlexRadioService: ObservableObject {
         components.queryItems = [
             URLQueryItem(name: "type", value: "8"),         // type 8 = tracks
             URLQueryItem(name: "radioKey", value: encodedRadioKey),
-            URLQueryItem(name: "count", value: "50"),
-            URLQueryItem(name: "X-Plex-Token", value: token)
+            URLQueryItem(name: "count", value: "50")
         ]
 
         guard let url = components.url else {
@@ -119,8 +118,7 @@ final class PlexRadioService: ObservableObject {
         components.queryItems = [
             URLQueryItem(name: "type", value: "8"),
             URLQueryItem(name: "radioKey", value: encodedRadioKey),
-            URLQueryItem(name: "count", value: "50"),
-            URLQueryItem(name: "X-Plex-Token", value: token)
+            URLQueryItem(name: "count", value: "50")
         ]
 
         guard let url = components.url else {
@@ -158,8 +156,7 @@ final class PlexRadioService: ObservableObject {
         components.queryItems = [
             URLQueryItem(name: "type", value: "8"),
             URLQueryItem(name: "radioKey", value: encodedRadioKey),
-            URLQueryItem(name: "count", value: "25"),
-            URLQueryItem(name: "X-Plex-Token", value: token)
+            URLQueryItem(name: "count", value: "25")
         ]
 
         guard let url = components.url else { return }
@@ -176,6 +173,7 @@ final class PlexRadioService: ObservableObject {
 
     /// Fetches tracks from a Plex radio/hub endpoint.
     /// The response is a hub container with metadata items (tracks).
+    /// Authentication is intentionally header-first; radio URLs must not carry `X-Plex-Token`.
     private func fetchRadioTracks(from url: URL, serverURL: String, token: String) async throws -> [MusicTrack] {
         let headers = [
             "Accept": "application/json",

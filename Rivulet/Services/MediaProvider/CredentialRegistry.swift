@@ -47,9 +47,10 @@ final class CredentialRegistry {
 
     private(set) var accounts: [AccountCredential] = []
     private(set) var serverCredentials: [ServerCredential] = []
+    private(set) var serverUserCredentialScopes: Set<CredentialScope> = []
 
     /// Returns the token previously stored under `scope`, or nil.
-    nonisolated func token(for scope: CredentialScope) -> String? {
+    func token(for scope: CredentialScope) -> String? {
         KeychainHelper.get(scope.keychainKey)
     }
 
@@ -74,9 +75,49 @@ final class CredentialRegistry {
     func registerServer(_ credential: ServerCredential) {
         serverCredentials.removeAll { $0.id == credential.id }
         serverCredentials.append(credential)
+        registerServerUser(providerID: credential.id, userID: credential.userID)
     }
 
     func unregisterServer(providerID: String) {
         serverCredentials.removeAll { $0.id == providerID }
+        serverUserCredentialScopes = serverUserCredentialScopes.filter { scope in
+            if case .serverUser(let id, _) = scope {
+                return id != providerID
+            }
+            return true
+        }
+    }
+
+    func registerServerUser(providerID: String, userID: String) {
+        guard !providerID.isEmpty, !userID.isEmpty else { return }
+        serverUserCredentialScopes.insert(.serverUser(providerID: providerID, userID: userID))
+    }
+
+    func unregisterServerUser(providerID: String, userID: String) {
+        serverUserCredentialScopes.remove(.serverUser(providerID: providerID, userID: userID))
+    }
+
+    /// Clears every credential scope currently known to the registry.
+    ///
+    /// This is intentionally registry-scoped: direct legacy PlexAuthManager
+    /// keys are still cleared by PlexAuthManager because they pre-date this
+    /// registry and use different Keychain account names.
+    func clearRegisteredCredentials() {
+        for account in accounts {
+            KeychainHelper.delete(CredentialScope.plexAccount(accountID: account.id).keychainKey)
+        }
+
+        for credential in serverCredentials {
+            KeychainHelper.delete(CredentialScope.server(providerID: credential.id).keychainKey)
+            KeychainHelper.delete(CredentialScope.serverUser(providerID: credential.id, userID: credential.userID).keychainKey)
+        }
+
+        for scope in serverUserCredentialScopes {
+            KeychainHelper.delete(scope.keychainKey)
+        }
+
+        accounts.removeAll()
+        serverCredentials.removeAll()
+        serverUserCredentialScopes.removeAll()
     }
 }

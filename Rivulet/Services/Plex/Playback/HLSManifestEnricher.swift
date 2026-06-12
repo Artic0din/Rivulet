@@ -17,6 +17,31 @@ final class HLSManifestEnricher: NSObject, AVAssetResourceLoaderDelegate, @unche
 
     static let customScheme = "rivulet-hls"
 
+    /// A token-free, log-safe structural summary of an HLS manifest.
+    ///
+    /// The patched master playlist rewrites every relative URL to an absolute
+    /// Plex URL with `X-Plex-Token` appended (see `makeAbsoluteURL`), so logging
+    /// the manifest body — even line by line — leaks the raw token. This emits
+    /// ONLY structural counts (no URLs, no bodies, no tags), so it is safe to log
+    /// by construction. `nonisolated static` so it is callable and unit-testable
+    /// from anywhere with no instance/auth state.
+    nonisolated static func manifestDiagnosticSummary(_ manifest: String) -> String {
+        let lines = manifest.components(separatedBy: "\n")
+        var nonEmpty = 0
+        var variants = 0
+        var media = 0
+        var iFrame = 0
+        var uriRefs = 0
+        for line in lines where !line.isEmpty {
+            nonEmpty += 1
+            if line.hasPrefix("#EXT-X-STREAM-INF:") { variants += 1 }
+            else if line.hasPrefix("#EXT-X-MEDIA:") { media += 1 }
+            else if line.hasPrefix("#EXT-X-I-FRAME-STREAM-INF") { iFrame += 1 }
+            else if !line.hasPrefix("#") { uriRefs += 1 }
+        }
+        return "lines=\(nonEmpty) variants=\(variants) media=\(media) iFrame=\(iFrame) uriRefs=\(uriRefs)"
+    }
+
     private let metadata: PlexMetadata
     private let headers: [String: String]
     private let originalScheme: String
@@ -88,10 +113,9 @@ final class HLSManifestEnricher: NSObject, AVAssetResourceLoaderDelegate, @unche
             }
 
             let patched = patchMasterPlaylist(manifest)
-            playerDebugLog("[HLSEnricher] Patched master playlist:")
-            for line in patched.components(separatedBy: "\n") where !line.isEmpty {
-                playerDebugLog("[HLSEnricher]   \(line)")
-            }
+            // SECURITY: never log the patched manifest body — its rewritten URLs
+            // carry `X-Plex-Token`. Log a token-free structural summary instead.
+            playerDebugLog("[HLSEnricher] Patched master playlist: \(Self.manifestDiagnosticSummary(patched))")
 
             let patchedData = patched.data(using: .utf8)!
             loadingRequest.dataRequest?.respond(with: patchedData)
@@ -103,7 +127,9 @@ final class HLSManifestEnricher: NSObject, AVAssetResourceLoaderDelegate, @unche
             loadingRequest.contentInformationRequest?.isByteRangeAccessSupported = false
             loadingRequest.finishLoading()
         } catch {
-            playerDebugLog("[HLSEnricher] Failed to fetch master playlist: \(error)")
+            // Redact: URLSession errors can embed the token-bearing failing URL.
+            let safeError = SensitiveDataRedactor.redact(String(describing: error)) ?? "error"
+            playerDebugLog("[HLSEnricher] Failed to fetch master playlist: \(safeError)")
             loadingRequest.finishLoading(with: error)
         }
     }

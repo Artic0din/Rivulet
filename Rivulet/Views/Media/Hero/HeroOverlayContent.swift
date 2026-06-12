@@ -22,6 +22,9 @@ struct HeroOverlayContent: View {
     let onPlay: (PlexMetadata) -> Void
     var onHeroFocused: (() -> Void)? = nil
     var onHeroExited: (() -> Void)? = nil
+    /// Host gate: false while a detail/preview/player/resume surface is presented
+    /// so the hero does not rotate behind it. Combined with scene phase + focus.
+    var autoRotationEnabled: Bool = true
 
     @ObservedObject private var watchlistService = PlexWatchlistService.shared
 
@@ -31,10 +34,16 @@ struct HeroOverlayContent: View {
     /// bookmark icon reflect reality after a successful add.
     @State private var resolvedForWatchlistCache: [String: PlexMetadata] = [:]
     @State private var isResolvingPlay: Bool = false
+    /// ADO-04: resolved content-status labels keyed by item ratingKey. Populated
+    /// lazily (cached, off the main thread) for the displayed hero item from its
+    /// TMDb status detail. Absent key = no label (graceful).
+    @State private var statusLabels: [String: ContentStatusLabel] = [:]
     /// Lags behind `currentIndex` by `slideSwapDelay` so the backdrop has
     /// time to crossfade before the logo/metadata/buttons swap in.
     @State private var displayedIndex: Int = 0
     @FocusState private var focusedButton: HeroButton?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     /// How long to wait after `currentIndex` changes before swapping the
     /// visible slide content. Keeps the metadata from popping in ahead of
@@ -55,6 +64,26 @@ struct HeroOverlayContent: View {
 
     private var canAdvance: Bool { items.count > 1 }
 
+    /// Whether auto-rotation may run right now (pure policy + live state). Note:
+    /// focus does NOT pause rotation — the hero lands with Play focused, so a
+    /// focus-pause would stop it rotating entirely (the button row is
+    /// focus-stable, so only the slide content swaps).
+    private var rotationActive: Bool {
+        HeroRotationPolicy.shouldRotate(
+            itemCount: items.count,
+            isBusy: isResolvingPlay,
+            isActive: autoRotationEnabled && scenePhase == .active
+        )
+    }
+
+    /// Restart token for the rotation wait. Any change cancels and restarts the
+    /// `.task`, which RESETS the interval — so a manual advance (currentIndex),
+    /// busy state, scene phase, or item-set change all restart the countdown
+    /// rather than firing mid-wait.
+    private var rotationToken: String {
+        "\(currentIndex)|\(isResolvingPlay)|\(items.count)|\(autoRotationEnabled)|\(scenePhase == .active)"
+    }
+
     /// Must match the hero-section height computed in `PlexHomeView.contentView`
     /// and `PlexLibraryView.contentView` (`UIScreen.main.bounds.height - 180`).
     /// Set here explicitly so the layout doesn't depend on SwiftUI propagating
@@ -74,7 +103,8 @@ struct HeroOverlayContent: View {
                         HeroSlideContent(
                             item: item,
                             serverURL: serverURL,
-                            authToken: authToken
+                            authToken: authToken,
+                            statusLabel: statusLabels[item.ratingKey ?? ""]
                         )
                         .id(item.ratingKey ?? "idx-\(displayedIndex)")
                         .transition(.opacity)
@@ -114,6 +144,11 @@ struct HeroOverlayContent: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: Self.heroHeight)
+        // Deterministic initial focus (E2-PR3/E2-PR4): when the hero focus
+        // section is entered, Play is the preferred target rather than whatever
+        // the focus engine would pick. Play is always present, so focus is never
+        // stranded.
+        .defaultFocus($focusedButton, .play)
         .onAppear {
             // Sync the displayed slide with the active index on first load.
             if displayedIndex != currentIndex {
@@ -123,8 +158,13 @@ struct HeroOverlayContent: View {
         .onChange(of: currentIndex) { _, newIndex in
             Task { @MainActor in
                 try? await Task.sleep(for: Self.slideSwapDelay)
-                withAnimation(.easeInOut(duration: 0.22)) {
+                // Reduced Motion: swap content instantly with no crossfade.
+                if reduceMotion {
                     displayedIndex = newIndex
+                } else {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        displayedIndex = newIndex
+                    }
                 }
             }
         }
@@ -139,6 +179,43 @@ struct HeroOverlayContent: View {
             if currentIndex >= items.count { currentIndex = 0 }
             if displayedIndex >= items.count { displayedIndex = 0 }
         }
+        // Auto-rotation: wait one interval, then advance. The task is keyed on
+        // `rotationToken`, so any state change (manual advance, focus enter/exit,
+        // busy, scene phase, item set) cancels and restarts the wait — giving
+        // automatic pause/resume and a clean timer reset on manual navigation,
+        // with no per-rotation network or token exposure. Reduce Motion still
+        // rotates; the swap is made instant by the `onChange(of: currentIndex)`
+        // handler above.
+        .task(id: rotationToken) {
+            guard rotationActive else { return }
+            try? await Task.sleep(for: .seconds(HeroRotationPolicy.intervalSeconds))
+            guard !Task.isCancelled, rotationActive else { return }
+            advance()
+        }
+        // ADO-04: resolve the content-status label for the displayed hero item
+        // (cached; no label when data is missing). Keyed on the displayed item so
+        // rotation re-reads the cache without refetching.
+        .task(id: displayedItem?.ratingKey) {
+            await resolveStatusLabel(for: displayedItem)
+        }
+    }
+
+    /// Resolves a hero-eligible content-status label for `item` from its TMDb
+    /// status detail (reusing the cached `tmdb/details/{id}` payload). Stores
+    /// nothing when there is no tmdbId, no data, or no qualifying/hero-allowed
+    /// label — the hero then shows no chip.
+    private func resolveStatusLabel(for item: PlexMetadata?) async {
+        guard let item, let key = item.ratingKey,
+              statusLabels[key] == nil,
+              let tmdbId = item.tmdbId else { return }
+        let kind = TMDBContentStatus.kind(fromPlexType: item.type)
+        let type: TMDBMediaType = (item.type == "movie") ? .movie : .tv
+        guard let detail = await TMDBDiscoverService.shared.fetchStatusDetail(tmdbId: tmdbId, type: type) else { return }
+        let now = Date()
+        let input = TMDBContentStatus.input(from: detail, kind: kind, reference: now)
+        guard let label = ContentStatusPolicy.classify(input, reference: now),
+              ContentStatusPlacement.allows(label, on: .hero) else { return }
+        statusLabels[key] = label
     }
 
     // MARK: - Paging Dots
@@ -149,7 +226,7 @@ struct HeroOverlayContent: View {
                 Capsule()
                     .fill(Color.white.opacity(idx == displayedIndex ? 1.0 : 0.35))
                     .frame(width: idx == displayedIndex ? 22 : 8, height: 8)
-                    .animation(.easeInOut(duration: 0.25), value: displayedIndex)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: displayedIndex)
             }
         }
     }
@@ -160,7 +237,8 @@ struct HeroOverlayContent: View {
         guard canAdvance else { return }
         // The backdrop reacts to `currentIndex` immediately; the visible
         // overlay follows ~100ms later via the onChange handler in `body`.
-        currentIndex = (currentIndex + 1) % items.count
+        // Index math is the tested `HeroRotationPolicy` (shared with auto-rotate).
+        currentIndex = HeroRotationPolicy.nextIndex(current: currentIndex, count: items.count)
     }
 
     // MARK: - Play

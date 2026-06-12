@@ -12,6 +12,11 @@ import os.log
 private let watchlistLog = Logger(subsystem: "com.rivulet.app", category: "PlexWatchlist")
 
 @MainActor
+protocol PlexWatchlistManaging: AnyObject {
+    func contains(tmdbId: Int) -> Bool
+}
+
+@MainActor
 final class PlexWatchlistService: ObservableObject {
     static let shared = PlexWatchlistService(
         api: PlexWatchlistAPI(),
@@ -160,3 +165,5 @@ final class PlexWatchlistService: ObservableObject {
         }
     }
 }
+
+extension PlexWatchlistService: PlexWatchlistManaging {}

@@ -62,6 +62,31 @@ struct ContinueWatchingCard: View, Equatable {
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .hoverEffect(.highlight)
         .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 6)
+        // A11Y-004: present the card as one meaningful element rather than a
+        // fragmented stack of image + logo + info text.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityDescription)
+    }
+
+    /// Combined VoiceOver description: title, episode, time remaining, progress.
+    private var accessibilityDescription: String {
+        var parts: [String] = []
+        let title = item.type == "episode"
+            ? (item.grandparentTitle ?? item.title ?? "Unknown")
+            : (item.title ?? "Unknown")
+        parts.append(title)
+        if item.type == "episode" {
+            parts.append("Season \(item.parentIndex ?? 0), Episode \(item.index ?? 0)")
+        }
+        if let remaining = item.remainingTimeFormatted {
+            parts.append("\(remaining) remaining")
+        } else if let duration = item.durationFormatted {
+            parts.append(duration)
+        }
+        if let progress = item.watchProgress, progress > 0, progress < 1 {
+            parts.append("\(Int(progress * 100)) percent watched")
+        }
+        return parts.joined(separator: ", ")
     }
 
     // MARK: - Artwork Image

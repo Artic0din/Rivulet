@@ -53,6 +53,60 @@ final class PlexWatchlistServiceTests: XCTestCase {
         XCTAssertTrue(service.watchlistGUIDs.contains("tmdb://9"))
     }
 
+    func testFetchWatchlistProviderFailurePreservesCachedState() async {
+        let cachedItem = makeItem(id: "cached", guid: "tmdb://42")
+        let api = StubWatchlistAPI()
+        api.fetchError = URLError(.cannotConnectToHost)
+
+        let service = PlexWatchlistService(api: api, cache: RecordingWatchlistCache(initialItems: [cachedItem]))
+        await service.fetchWatchlist(force: true)
+
+        XCTAssertEqual(service.watchlistItems, [cachedItem])
+        XCTAssertTrue(service.watchlistGUIDs.contains("tmdb://42"))
+        XCTAssertNotNil(service.lastFetchError)
+        XCTAssertNil(service.transientWriteError)
+    }
+
+    func testProviderHTTPErrorRedactsTokenBearingBodySnippet() {
+        let error = PlexWatchlistHTTPError(
+            statusCode: 500,
+            bodySnippet: #"upstream failed url=https://discover.provider.plex.tv/actions/addToWatchlist?ratingKey=1&X-Plex-Token=secret-token"#
+        )
+
+        XCTAssertFalse(error.localizedDescription.contains("secret-token"))
+        XCTAssertFalse(error.localizedDescription.contains("X-Plex-Token=secret-token"))
+        XCTAssertTrue(error.localizedDescription.contains("X-Plex-Token=REDACTED"))
+    }
+
+    func testProviderWritesUseAccountTokenProviderOnly() async {
+        let api = StubWatchlistAPI()
+        let service = PlexWatchlistService(
+            api: api,
+            cache: NullWatchlistCache(),
+            tokenProvider: { "account-token" }
+        )
+
+        await service.add(guid: "tmdb://1", item: makeItem(id: "1"))
+        await service.remove(guid: "tmdb://1")
+
+        XCTAssertEqual(api.addTokens, ["account-token"])
+        XCTAssertEqual(api.removeTokens, ["account-token"])
+    }
+
+    func testWriteFailureSurfacesRecoverableSecretSafeMessage() async {
+        let api = StubWatchlistAPI()
+        api.writeError = PlexWatchlistHTTPError(
+            statusCode: 503,
+            bodySnippet: #"provider failed https://metadata.provider.plex.tv/library/metadata/matches?guid=tmdb://1&X-Plex-Token=secret-token"#
+        )
+        let service = PlexWatchlistService(api: api, cache: NullWatchlistCache())
+
+        await service.add(guid: "tmdb://1", item: makeItem(id: "1"))
+
+        XCTAssertEqual(service.transientWriteError, "Couldn't update Watchlist")
+        XCTAssertFalse(service.lastFetchError?.localizedDescription.contains("secret-token") ?? true)
+    }
+
     func testContainsTmdbIdMatchesGuid() async {
         let api = StubWatchlistAPI()
         let service = PlexWatchlistService(api: api, cache: NullWatchlistCache())
@@ -112,15 +166,28 @@ final class PlexWatchlistServiceTests: XCTestCase {
 
 final class StubWatchlistAPI: PlexWatchlistAPIProtocol, @unchecked Sendable {
     var shouldFailWrites = false
+    var fetchError: Error?
+    var writeError: Error?
     var fetchResult: [PlexWatchlistItem] = []
+    var fetchTokens: [String] = []
+    var addTokens: [String] = []
+    var removeTokens: [String] = []
 
-    func fetchAll(token: String) async throws -> [PlexWatchlistItem] { fetchResult }
+    func fetchAll(token: String) async throws -> [PlexWatchlistItem] {
+        fetchTokens.append(token)
+        if let fetchError { throw fetchError }
+        return fetchResult
+    }
 
     func add(guids: [String], token: String) async throws {
+        addTokens.append(token)
+        if let writeError { throw writeError }
         if shouldFailWrites { throw URLError(.notConnectedToInternet) }
     }
 
     func remove(guid: String, token: String) async throws {
+        removeTokens.append(token)
+        if let writeError { throw writeError }
         if shouldFailWrites { throw URLError(.notConnectedToInternet) }
     }
 }
@@ -129,4 +196,24 @@ final class NullWatchlistCache: WatchlistCacheProtocol {
     func load() -> [PlexWatchlistItem]? { nil }
     func save(_ items: [PlexWatchlistItem]) {}
     func clear() {}
+}
+
+final class RecordingWatchlistCache: WatchlistCacheProtocol, @unchecked Sendable {
+    private let initialItems: [PlexWatchlistItem]?
+    private(set) var savedItems: [PlexWatchlistItem]?
+    private(set) var didClear = false
+
+    init(initialItems: [PlexWatchlistItem]? = nil) {
+        self.initialItems = initialItems
+    }
+
+    func load() -> [PlexWatchlistItem]? { initialItems }
+
+    func save(_ items: [PlexWatchlistItem]) {
+        savedItems = items
+    }
+
+    func clear() {
+        didClear = true
+    }
 }

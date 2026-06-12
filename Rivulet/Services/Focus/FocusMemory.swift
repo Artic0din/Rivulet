@@ -46,6 +46,20 @@ final class FocusMemory {
         memory[key]
     }
 
+    /// Recall the last focused item only if it is still a valid target.
+    ///
+    /// If the remembered id is no longer present in `validIDs` (e.g. the item was
+    /// removed by a refresh), the stale entry is pruned and `nil` is returned so
+    /// the caller does not restore focus onto a vanished item (E2-PR3).
+    func recall(for key: String, validIDs: Set<String>) -> String? {
+        guard let remembered = memory[key] else { return nil }
+        guard validIDs.contains(remembered) else {
+            memory.removeValue(forKey: key)
+            return nil
+        }
+        return remembered
+    }
+
     /// Forget the focus for a specific section
     func forget(key: String) {
         memory.removeValue(forKey: key)
@@ -88,6 +102,10 @@ struct FocusMemoryModifier: ViewModifier {
     let memoryKey: String
     var focusedId: FocusState<String?>.Binding
     var restoreOnEntry: Bool = true
+    /// Optional supplier of the currently-valid focus identities. When provided,
+    /// restoration only redirects to a remembered id that is still valid and
+    /// prunes stale memory otherwise (E2-PR3). When nil, behavior is unchanged.
+    var validIDs: (() -> Set<String>)?
     @Environment(\.focusMemory) private var focusMemory
 
     #if DEBUG
@@ -104,9 +122,13 @@ struct FocusMemoryModifier: ViewModifier {
                 debugLog("focusChanged", extra: "old=\(oldValue ?? "nil") new=\(newValue ?? "nil")")
                 // Focus is entering this section (was nil, now has value)
                 if restoreOnEntry, oldValue == nil, let newValue = newValue {
-                    // Check if we have a remembered value that's different
-                    if let remembered = focusMemory.recall(for: memoryKey),
-                       remembered != newValue {
+                    // Check if we have a remembered value that's different. When a
+                    // valid-id supplier is provided, only restore to a still-valid
+                    // id (stale entries are pruned) so focus is never redirected
+                    // onto a vanished item.
+                    let remembered = validIDs.map { focusMemory.recall(for: memoryKey, validIDs: $0()) }
+                        ?? focusMemory.recall(for: memoryKey)
+                    if let remembered, remembered != newValue {
                         debugLog("redirectToRemembered", extra: "new=\(newValue) remembered=\(remembered)")
                         // Redirect to remembered item instantly (no animation)
                         var transaction = Transaction()
@@ -139,12 +161,16 @@ extension View {
     ///   - focusedId: Binding to the @FocusState variable tracking focus
     ///   - restoreOnEntry: When false, remembers focus changes but does not auto-redirect
     ///     when the section is entered.
+    ///   - validIDs: optional supplier of currently-valid focus identities. When
+    ///     provided, restoration only targets a still-valid id and prunes stale
+    ///     memory (E2-PR3). When omitted, behavior is unchanged.
     func remembersFocus(
         key: String,
         focusedId: FocusState<String?>.Binding,
-        restoreOnEntry: Bool = true
+        restoreOnEntry: Bool = true,
+        validIDs: (() -> Set<String>)? = nil
     ) -> some View {
-        modifier(FocusMemoryModifier(memoryKey: key, focusedId: focusedId, restoreOnEntry: restoreOnEntry))
+        modifier(FocusMemoryModifier(memoryKey: key, focusedId: focusedId, restoreOnEntry: restoreOnEntry, validIDs: validIDs))
     }
 }
 

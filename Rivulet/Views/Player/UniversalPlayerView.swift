@@ -1289,42 +1289,12 @@ struct UniversalPlayerView: View {
                             .font(.system(size: 24, weight: .semibold))
                             .contentTransition(.numericText())
                     }
-                    .foregroundStyle(.white)
                     .padding(.horizontal, 32)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(.black.opacity(isSkipButtonFocused ? 0.75 : 0.55))
-                            .background(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .fill(.ultraThinMaterial)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .strokeBorder(
-                                        isSkipButtonFocused ? .white : .white.opacity(0.15),
-                                        lineWidth: isSkipButtonFocused ? 3 : 1
-                                    )
-                            )
-                    )
-                    // Focused glow effect - makes selection very obvious
-                    .shadow(
-                        color: isSkipButtonFocused ? .white.opacity(0.5) : .clear,
-                        radius: 16,
-                        x: 0,
-                        y: 0
-                    )
-                    // Drop shadow for depth
-                    .shadow(
-                        color: .black.opacity(0.4),
-                        radius: 8,
-                        x: 0,
-                        y: 4
-                    )
-                    .scaleEffect(isSkipButtonFocused ? 1.08 : 1.0)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSkipButtonFocused)
+                    .frame(height: 66)
                 }
-                .buttonStyle(CardButtonStyle())
+                // Shared app action-pill style (same as hero / Next Episode):
+                // white-on-focus fill, glass at rest, token scale, no default halo.
+                .buttonStyle(AppStoreActionButtonStyle(isFocused: isSkipButtonFocused, cornerRadius: 33))
                 .focused($isSkipButtonFocused)
             }
             .padding(.trailing, 80)

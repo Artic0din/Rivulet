@@ -81,6 +81,9 @@ struct MediaDetailView: View {
     // Detail state (replaces fullMetadata)
     @State private var detail: MediaItemDetail?
     @State private var collectionItems: [MediaItem] = []
+    /// ADO-04: editorial content-status label for the detail header, resolved
+    /// from the item's TMDb status once `detail` (and its tmdbId) loads.
+    @State private var contentStatusLabel: ContentStatusLabel?
     @State private var collectionName: String?
     @State private var recommendedItems: [MediaItem] = []
     @State private var isWatched = false
@@ -682,18 +685,28 @@ struct MediaDetailView: View {
 
     /// Fixed backdrop image (behind everything, doesn't scroll)
     private var heroBackdropImage: some View {
-        HeroBackdropImage(
-            url: heroBackdrop.session.displayedBackdropURL,
-            animationDuration: isPreviewCarousel ? 0.38 : 0.26
-        ) {
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.blue.opacity(0.3), Color.black],
-                        startPoint: .top,
-                        endPoint: .bottom
+        ZStack {
+            HeroBackdropImage(
+                url: heroBackdrop.session.displayedBackdropURL,
+                animationDuration: isPreviewCarousel ? 0.38 : 0.26
+            ) {
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.blue.opacity(0.3), Color.black],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     )
-                )
+            }
+
+            // ADO-06: subtle artwork-driven tint, above the art and beneath the
+            // existing legibility scrims. Reuses the cached backdrop image (no new
+            // fetch); disabled under Increase Contrast.
+            AdaptiveTintLayer(
+                itemKey: currentItem.ref.itemID,
+                artworkURL: heroBackdrop.session.displayedBackdropURL
+            )
         }
     }
 
@@ -720,6 +733,19 @@ struct MediaDetailView: View {
                 // Text content — fixed height so buttons/peek distance
                 // stays constant regardless of description length, logo vs title, etc.
                 VStack(alignment: .leading, spacing: 14) {
+                    // ADO-04: editorial content-status label above the title
+                    // (Status → Title → Metadata → Synopsis). Shown only when the
+                    // tested policy returns a detail-eligible, data-backed label.
+                    if let contentStatusLabel {
+                        Text(contentStatusLabel.displayText.uppercased())
+                            .font(.system(size: 15, weight: .bold))
+                            .tracking(0.5)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(Capsule(style: .continuous).fill(Color.white.opacity(0.16)))
+                            .accessibilityLabel(contentStatusLabel.displayText)
+                    }
                     // Plex clearLogo or title — fixed height so content below is always
                     // at the same position regardless of logo aspect ratio
                     Group {
@@ -946,58 +972,36 @@ struct MediaDetailView: View {
                 Text(part)
             }
 
-            // Content rating badge (bordered, at end)
-            if let contentRating = detail?.contentRating {
-                Text(contentRating)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .stroke(Color.white.opacity(0.5), lineWidth: 1)
-                    }
+            // ADO-06: content rating as a first-class metadata badge (same style
+            // as the technical badges), display-normalised via RatingBadgePolicy.
+            if let rating = RatingBadgePolicy.displayRating(detail?.contentRating) {
+                MetadataBadge(text: rating)
             }
         }
         .font(.caption)
         .foregroundStyle(.white.opacity(0.85))
     }
 
+    // E3-PR4: ordering owned by the tested DetailMetadataCascade (type label +
+    // up to 2 genres). Behavior-identical to the prior inline logic.
     private var heroMetadataParts: [String] {
-        var parts: [String] = []
-
-        // Type label from kind
-        switch currentItem.kind {
-        case .show, .episode, .season:
-            parts.append("TV Show")
-        case .movie:
-            parts.append("Movie")
-        default:
-            break
-        }
-
-        // Genres (up to 2 — keeps the row concise alongside the type label and rating badge)
-        let genres = detail?.genres ?? []
-        for genre in genres.prefix(2) {
-            parts.append(genre)
-        }
-
-        return parts
+        DetailMetadataCascade.primaryParts(kind: currentItem.kind, genres: detail?.genres ?? [])
     }
 
     /// Year, duration, quality badges row (Apple TV+ style: "2023 · 49 min [4K] [DV] [5.1]")
     private var heroQualityRow: some View {
         HStack(spacing: 8) {
-            // Year · Duration with dot separator
-            let year = currentItem.year
-            let duration = currentItemDurationFormatted
-
-            if let year {
-                Text(String(year))
-            }
-            if year != nil && duration != nil {
-                Text("·")
-            }
-            if let duration {
-                Text(duration)
+            // Year · Duration with dot separator. Ordering/nil-filtering owned
+            // by the tested DetailMetadataCascade (E3-PR4); behavior-identical.
+            let chronology = DetailMetadataCascade.chronologyParts(
+                year: currentItem.year,
+                duration: currentItemDurationFormatted
+            )
+            ForEach(Array(chronology.enumerated()), id: \.offset) { index, part in
+                if index > 0 {
+                    Text("·")
+                }
+                Text(part)
             }
 
             if let rating = detail?.rating {
@@ -1008,34 +1012,15 @@ struct MediaDetailView: View {
                 }
             }
 
-            // Quality badges from MediaSource
+            // Quality badges from MediaSource — ADO-06: rendered with the shared
+            // MetadataBadge so technical badges and the rating badge match.
             let badges = detail?.mediaSources.first?.qualityBadges() ?? []
             ForEach(badges, id: \.self) { badge in
-                QualityBadge(text: badge)
+                MetadataBadge(text: badge)
             }
         }
         .font(.caption.bold())
         .foregroundStyle(.white)
-    }
-
-    /// Small badge for quality indicators (4K, DV, Atmos, etc.)
-    private struct QualityBadge: View {
-        let text: String
-        var body: some View {
-            Text(text)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(.white.opacity(0.15))
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .stroke(.white.opacity(0.3), lineWidth: 0.5)
-                }
-        }
     }
 
     /// Icon for fallback poster based on item kind
@@ -1163,9 +1148,25 @@ struct MediaDetailView: View {
     /// / `showPlayer` as needed. `userState.viewOffset` is in seconds; the
     /// formatter wants milliseconds.
     private func presentPlay(for item: MediaItem, launch: @escaping (_ playFromBeginning: Bool) -> Void) {
+        // E4-PR5B: PlaybackResumePolicy is the single source for the resume /
+        // restart prompt decision. `viewOffset`/`runtime` are seconds, sourced
+        // from integer-millisecond Plex values, so the ms conversion is exact and
+        // `decide` reproduces `promptResumeOrRestart && isInProgress && offset>0`
+        // verbatim (verified by PlaybackPolicyIntegrationTests). Live TV /
+        // trailers do not route through `presentPlay`, so those flags stay false.
         let offsetSec = item.userState.viewOffset
-        if promptResumeOrRestart, item.isInProgress, offsetSec > 0 {
-            resumeChoiceTimeMs = Int(offsetSec * 1000)
+        let decision = PlaybackResumePolicy.decide(
+            PlaybackResumePolicy.ResumeInput(
+                viewOffsetMs: Int(offsetSec * 1000),
+                durationMs: Int((item.runtime ?? 0) * 1000),
+                promptEnabled: promptResumeOrRestart,
+                explicitRestart: false,
+                isLive: false,
+                isTrailer: false
+            )
+        )
+        if case .prompt(let offsetMs) = decision {
+            resumeChoiceTimeMs = offsetMs
             resumeChoiceLaunch = launch
             showResumeChoice = true
         } else {
@@ -1819,6 +1820,20 @@ struct MediaDetailView: View {
         return []
     }
 
+    /// Episodes-per-season counts (keyed by the season's ref id) derived from the
+    /// already-loaded episode lists — no extra fetch. Backs the episode-card
+    /// "Season Finale" label (ADO-05): a complete season's count equals its
+    /// episode total, so `episodeIndex == count` marks the finale. An incomplete
+    /// library yields a conservative count and simply doesn't fire the signal.
+    private func episodeCounts(in list: [MediaItem]) -> [String: Int] {
+        list.reduce(into: [:]) { acc, item in
+            guard let key = item.parentRef?.itemID else { return }
+            acc[key, default: 0] += 1
+        }
+    }
+    private var unifiedSeasonEpisodeCounts: [String: Int] { episodeCounts(in: unifiedEpisodes) }
+    private var seasonEpisodeCounts: [String: Int] { episodeCounts(in: episodes) }
+
     /// Unified horizontal episode card row across all seasons
     private var unifiedEpisodeList: some View {
         Group {
@@ -1839,6 +1854,7 @@ struct MediaDetailView: View {
                                     authToken: authManager.selectedServerToken ?? "",
                                     focusedEpisodeId: $focusedEpisodeId,
                                     showSeasonPrefix: seasons.count > 1,
+                                    seasonEpisodeCount: episode.parentRef.flatMap { unifiedSeasonEpisodeCounts[$0.itemID] },
                                     onPlay: {
                                         presentPlay(for: episode) { fromBeginning in
                                             selectedEpisodeItem = episode
@@ -1914,6 +1930,7 @@ struct MediaDetailView: View {
                                 serverURL: authManager.selectedServerURL ?? "",
                                 authToken: authManager.selectedServerToken ?? "",
                                 focusedEpisodeId: $focusedEpisodeId,
+                                seasonEpisodeCount: episode.parentRef.flatMap { seasonEpisodeCounts[$0.itemID] },
                                 onPlay: {
                                     presentPlay(for: episode) { fromBeginning in
                                         selectedEpisodeItem = episode
@@ -2313,6 +2330,30 @@ struct MediaDetailView: View {
 
         isLoadingExtras = false
         _ = ratingKey
+
+        await resolveContentStatus()
+    }
+
+    /// ADO-04: resolves the detail header's content-status label from the item's
+    /// TMDb status (reusing the cached `tmdb/details/{id}` payload). Sets nil when
+    /// there is no tmdbId, the item is not a movie/show, or no detail-eligible,
+    /// still-upcoming/qualifying label applies.
+    private func resolveContentStatus() async {
+        contentStatusLabel = nil
+        guard let tmdbId = detail?.tmdbId else { return }
+        let kind: ContentStatusKind
+        let type: TMDBMediaType
+        switch currentItem.kind {
+        case .movie: kind = .movie; type = .movie
+        case .show:  kind = .show;  type = .tv
+        default: return // status labels are show/movie-level on detail
+        }
+        guard let status = await TMDBDiscoverService.shared.fetchStatusDetail(tmdbId: tmdbId, type: type) else { return }
+        let now = Date()
+        let input = TMDBContentStatus.input(from: status, kind: kind, reference: now)
+        guard let label = ContentStatusPolicy.classify(input, reference: now),
+              ContentStatusPlacement.allows(label, on: .detail) else { return }
+        contentStatusLabel = label
     }
 
     private func syncHeroBackdrop() {
@@ -3288,6 +3329,10 @@ struct EpisodeCard: View {
     let authToken: String
     var focusedEpisodeId: FocusState<String?>.Binding?
     var showSeasonPrefix: Bool = false
+    /// Total episodes in this episode's season, computed by the parent from the
+    /// already-loaded episode list (no extra fetch). Backs the "Season Finale"
+    /// content-status label (ADO-05); nil disables the finale signal.
+    var seasonEpisodeCount: Int? = nil
     let onPlay: () -> Void
     var onRefreshNeeded: MediaItemRefreshCallback? = nil
     var onShowInfo: MediaItemNavigationCallback? = nil
@@ -3310,6 +3355,21 @@ struct EpisodeCard: View {
     /// Infuse — in-progress episodes stay blurred until fully watched.
     private var blurForSpoilers: Bool {
         hideSpoilersForUnwatched && !episode.isWatched
+    }
+
+    /// ADO-05: the single Plex-backed content-status label for this card, or nil.
+    /// `Date()` is read at render time (view layer only); every decision lives in
+    /// the pure, tested `EpisodeCardPresentation.episodeStatusLabel`. Only
+    /// per-episode labels (Season Finale / New Episode Today / New Episode) can
+    /// surface here — `episodeStatusLabel` enforces the `episodeCard` placement.
+    private var contentStatusLabel: ContentStatusLabel? {
+        EpisodeCardPresentation.episodeStatusLabel(
+            episodeIndex: episode.episodeNumber,
+            seasonNumber: episode.seasonNumber,
+            seasonEpisodeCount: seasonEpisodeCount,
+            airDate: episode.airDate,
+            reference: Date()
+        )
     }
 
     var body: some View {
@@ -3375,6 +3435,17 @@ struct EpisodeCard: View {
             .prefersDefaultFocus(in: cardFocus)
             .focusEffectDisabled()
             .hoverEffectDisabled()
+            // ADO-01: the play control reads a combined episode summary via the
+            // tested EpisodeCardPresentation policy (episode, title, runtime, state).
+            .accessibilityLabel(EpisodeCardPresentation.accessibilityLabel(
+                episodeLabel: episodeLabel,
+                title: episode.title.isEmpty ? "Episode" : episode.title,
+                statusLabel: contentStatusLabel,
+                runtime: episode.durationFormatted,
+                isWatched: episode.isWatched,
+                progress: episode.watchProgress
+            ))
+            .accessibilityHint("Plays this episode")
 
             // Description — clicking opens the episode detail page so the
             // user can read the full synopsis and pre-play track pickers.
@@ -3386,6 +3457,23 @@ struct EpisodeCard: View {
                         .foregroundStyle(descriptionFocused ? .black.opacity(0.6) : .white.opacity(0.6))
                         .textCase(.uppercase)
                         .padding(.top, 10)
+
+                    // ADO-05: restrained, secondary status chip above the title.
+                    // Folded into the play button's combined VoiceOver label, so
+                    // hidden from the accessibility tree here to avoid a duplicate.
+                    if let status = contentStatusLabel {
+                        Text(status.displayText)
+                            .font(.system(size: 12, weight: .semibold))
+                            .textCase(.uppercase)
+                            .foregroundStyle(descriptionFocused ? .black.opacity(0.8) : .white.opacity(0.9))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule().fill(descriptionFocused ? .black.opacity(0.12) : .white.opacity(0.18))
+                            )
+                            .padding(.top, 2)
+                            .accessibilityHidden(true)
+                    }
 
                     Text(episode.title.isEmpty ? "Episode" : episode.title)
                         .font(.system(size: 20, weight: .bold))
@@ -3434,8 +3522,13 @@ struct EpisodeCard: View {
     }
 
     private var episodeLabel: String {
+        // ADO-01: non-prefix label sourced from the tested EpisodeCardPresentation
+        // policy ("EPISODE n"); the season-prefix path keeps the "S06E13" form
+        // used by the unified all-seasons list.
         if showSeasonPrefix, let epString = episode.episodeString { return epString }
-        if let n = episode.episodeNumber { return "Episode \(n)" }
+        if episode.episodeNumber != nil {
+            return EpisodeCardPresentation.episodeLabel(index: episode.episodeNumber)
+        }
         return episode.episodeString ?? "Episode"
     }
 }

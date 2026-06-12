@@ -114,6 +114,40 @@ Playback failed url=https://server:32400/video/...&X-Plex-Token=abcd1234
 - raw headers
 - raw server URL if it adds no essential diagnostic value
 
+### Current Configuration Baseline
+
+As of Epic 1 PR 3:
+
+- Sentry startup is compiled only for non-Debug builds in `Rivulet/RivuletApp.swift`.
+- The DSN is provided by ignored local file `Rivulet/Config/Secrets.swift` via `Secrets.sentryDSN`.
+- The tracked `Rivulet/Config/Secrets.swift.template` contains only the placeholder `YOUR_SENTRY_DSN_HERE`.
+- This workspace does not contain a local `Secrets.swift`, so current Debug validation does not report to Sentry.
+- A copied Release DSN could report to an inherited project unless Project Owner confirms Sentry project ownership or explicitly disables Release startup before release validation.
+- PR 2 disables Sentry automatic failed-request capture, automatic network breadcrumbs, and automatic network tracking to avoid SDK-captured raw URL/header leakage.
+- PR 2 adds `beforeSend` sanitization for event tags, extras, contexts, breadcrumbs, exceptions, messages, request URLs, query strings, and request headers.
+- PR 3 privacy baseline declares crash, performance, and other diagnostic data in the main app privacy manifest because Release Sentry can submit diagnostics when a DSN is configured.
+
+### Sentry Privacy Ownership Requirement
+
+Sentry is not production-acceptable solely because a privacy manifest exists. Before release validation or any Epic 1 release-candidate build:
+
+1. Project Owner must confirm that `Secrets.sentryDSN` points to a Rivulet-owned Sentry project, or explicitly disable Release Sentry startup.
+2. Privacy reviewer must confirm that the App Store privacy disclosure matches the enabled Sentry data types.
+3. Observability reviewer must confirm PR 2 redaction and `beforeSend` sanitization still cover changed events, extras, contexts, breadcrumbs, request data, and headers.
+4. Any new Sentry field that can contain Plex tokens, server URLs, media asset URLs, PINs, credentials, profile identifiers, stream URLs, or Top Shelf payload data blocks merge until redacted or removed.
+
+### Shared Redaction Utility
+
+Application code must use `SensitiveDataRedactor` for any diagnostic field that may contain a token, credential, PIN, auth header, query-token URL, stream URL, media asset URL, Discover/provider URL, PMS transcode URL, playback decision URL, or Top Shelf image URL.
+
+The redactor supports:
+
+- raw strings
+- `URL`
+- `URLComponents`
+- string header dictionaries
+- nested metadata dictionaries and arrays used by Sentry extras, event contexts, or breadcrumb data
+
 ## Review Requirements
 
 Any change that adds or modifies:
@@ -164,6 +198,16 @@ These current surfaces are explicitly in scope for first-pass remediation:
 - Any forbidden field in a production sink is a blocker.
 - Any unreviewed new crash field is a blocker.
 - Any unresolved ambiguity about whether a field contains a secret must be treated as a blocker until clarified.
+
+## Playback telemetry (Epic 4)
+
+Playback telemetry is governed by the typed `PlaybackTelemetry` contract
+(`Docs/modernization/epic-4/playback-telemetry-contract.md`,
+`Rivulet/Services/Plex/Playback/PlaybackTelemetry.swift`), which implements this
+policy for playback: a fixed allow-list of non-sensitive fields, no `URL`/dict in
+the public API, boundary redaction, and signpost-event-name-only + redacted
+Sentry breadcrumb sinks. New playback telemetry MUST be emitted through it, not
+through ad-hoc breadcrumbs/extras or `print`.
 
 ## Acceptance Criteria
 

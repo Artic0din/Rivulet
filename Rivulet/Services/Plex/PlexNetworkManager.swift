@@ -80,11 +80,12 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             if httpResponse.statusCode != 401 && httpResponse.statusCode != 403 && !(500...599).contains(httpResponse.statusCode) {
                 SentrySDK.capture(error: error) { scope in
                     scope.setTag(value: "plex_network", key: "component")
-                    scope.setExtra(value: url.absoluteString, key: "url")
+                    scope.setExtra(value: SensitiveDataRedactor.redact(url) ?? "unknown", key: "url")
                     scope.setExtra(value: method, key: "method")
                     scope.setExtra(value: httpResponse.statusCode, key: "status_code")
                     if let responseStr = String(data: data, encoding: .utf8) {
-                        scope.setExtra(value: String(responseStr.prefix(500)), key: "response_body")
+                        let snippet = String(responseStr.prefix(500))
+                        scope.setExtra(value: SensitiveDataRedactor.redact(snippet) ?? "", key: "response_body")
                     }
                 }
             }
@@ -97,27 +98,29 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         } catch {
             print("🌐 PlexNetwork: ❌ Decode error: \(error)")
             if let responseStr = String(data: data, encoding: .utf8) {
-                print("🌐 PlexNetwork: Full response: \(responseStr)")
+                let snippet = String(responseStr.prefix(500))
+                print("🌐 PlexNetwork: Response snippet: \(SensitiveDataRedactor.redact(snippet) ?? "")")
             }
 
             // Capture JSON decode errors to Sentry
             SentrySDK.capture(error: error) { scope in
                 scope.setTag(value: "plex_network", key: "component")
                 scope.setTag(value: "json_decode", key: "error_type")
-                scope.setExtra(value: url.absoluteString, key: "url")
+                scope.setExtra(value: SensitiveDataRedactor.redact(url) ?? "unknown", key: "url")
                 scope.setExtra(value: String(describing: T.self), key: "expected_type")
                 scope.setExtra(value: data.count, key: "response_size")
 
                 // Try UTF-8 first, fall back to Latin1 (which never fails) to capture something
                 if let responseStr = String(data: data, encoding: .utf8) {
-                    scope.setExtra(value: String(responseStr.prefix(2000)), key: "response_body")
+                    let snippet = String(responseStr.prefix(2000))
+                    scope.setExtra(value: SensitiveDataRedactor.redact(snippet) ?? "", key: "response_body")
                 } else {
                     // UTF-8 failed - capture what we can
                     scope.setTag(value: "true", key: "invalid_utf8")
 
                     // Latin1 encoding never fails - use it to get a lossy representation
                     if let latin1Str = String(data: data.prefix(2000), encoding: .isoLatin1) {
-                        scope.setExtra(value: latin1Str, key: "response_body_latin1")
+                        scope.setExtra(value: SensitiveDataRedactor.redact(latin1Str) ?? "", key: "response_body_latin1")
                     }
 
                     // Try to find the error position from the underlying error
@@ -135,7 +138,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
                         // Also capture as Latin1 string for context
                         if let contextStr = String(data: Data(problemArea), encoding: .isoLatin1) {
-                            scope.setExtra(value: contextStr, key: "context_around_error")
+                            scope.setExtra(value: SensitiveDataRedactor.redact(contextStr) ?? "", key: "context_around_error")
                         }
                     }
                 }
@@ -159,6 +162,11 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             request.addValue(value, forHTTPHeaderField: key)
         }
 
+        return try await requestData(request)
+    }
+
+    /// Execute a prepared request and return raw data.
+    func requestData(_ request: URLRequest) async throws -> Data {
         let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -170,6 +178,50 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         }
 
         return data
+    }
+
+    /// Build a PMS request that carries Plex credentials in headers, not query parameters.
+    func buildHeaderFirstPMSRequest(
+        serverURL: String,
+        authToken: String,
+        path: String,
+        method: String = "GET",
+        queryItems: [URLQueryItem] = [],
+        userId: Int? = nil
+    ) throws -> URLRequest {
+        let url = try buildHeaderFirstURL(baseURLString: serverURL, path: path, queryItems: queryItems)
+        return buildHeaderFirstRequest(url: url, authToken: authToken, method: method, userId: userId)
+    }
+
+    /// Build a plex.tv request that carries Plex credentials in headers, not query parameters.
+    func buildHeaderFirstPlexTVRequest(
+        path: String,
+        authToken: String,
+        method: String = "GET",
+        queryItems: [URLQueryItem] = []
+    ) throws -> URLRequest {
+        let url = try buildHeaderFirstURL(baseURLString: PlexAPI.baseUrl, path: path, queryItems: queryItems)
+        return buildHeaderFirstRequest(url: url, authToken: authToken, method: method)
+    }
+
+    /// Build the Plex Home profile switch request using header-carried credentials.
+    func buildHomeUserSwitchRequest(
+        userUUID: String,
+        pin: String?,
+        authToken: String
+    ) throws -> URLRequest {
+        var request = try buildHeaderFirstPlexTVRequest(
+            path: "/api/v2/home/users/\(userUUID)/switch",
+            authToken: authToken,
+            method: "POST"
+        )
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        if let pin, !pin.isEmpty {
+            request.addValue(pin, forHTTPHeaderField: "X-Plex-Pin")
+        }
+
+        return request
     }
 
     // MARK: - Authentication
@@ -243,14 +295,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         // Fetch machineIdentifiers for each server (needed for plex.direct URLs)
         let machineIds = await getServerMachineIdentifiers(authToken: authToken)
 
-        // Attach machineIdentifier to matching devices (match by name)
-        return devices.map { device in
-            var mutableDevice = device
-            if let machineId = machineIds[device.name] {
-                mutableDevice.machineIdentifier = machineId
-            }
-            return mutableDevice
-        }
+        return PlexServerSelectionPolicy.attachMachineIdentifiers(to: devices, using: machineIds)
     }
 
     /// Fetch machine identifiers from pms/servers.xml endpoint
@@ -264,7 +309,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             let data = try await requestData(url, headers: plexHeaders(authToken: authToken))
             return parseServerMachineIdentifiers(from: data)
         } catch {
-            print("🌐 PlexNetwork: Failed to fetch server machineIdentifiers: \(error)")
+            print("🌐 PlexNetwork: Failed to fetch server machineIdentifiers: \(SensitiveDataRedactor.redact(String(describing: error)) ?? "")")
             return [:]
         }
     }
@@ -272,40 +317,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     /// Parse machineIdentifier from servers.xml response
     /// Returns dictionary mapping clientIdentifier/name to machineIdentifier
     private func parseServerMachineIdentifiers(from data: Data) -> [String: String] {
-        var result: [String: String] = [:]
-
-        // Parse XML to extract Server elements with machineIdentifier
-        guard let xmlString = String(data: data, encoding: .utf8) else { return result }
-
-        // Simple regex-based parsing for Server elements
-        // Format: <Server ... machineIdentifier="xxx" ... />
-        let pattern = #"<Server[^>]+machineIdentifier="([^"]+)"[^>]*>"#
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return result }
-
-        let matches = regex.matches(in: xmlString, range: NSRange(xmlString.startIndex..., in: xmlString))
-        for match in matches {
-            if let machineIdRange = Range(match.range(at: 1), in: xmlString) {
-                let machineId = String(xmlString[machineIdRange])
-
-                // Also try to extract name or accessToken to map back to resources
-                let serverStart = match.range.location
-                let serverEnd = min(serverStart + 500, xmlString.count)
-                let serverSubstring = String(xmlString.prefix(serverEnd).suffix(serverEnd - serverStart))
-
-                // Try to match by name
-                if let nameMatch = serverSubstring.range(of: #"name="([^"]+)""#, options: .regularExpression) {
-                    let nameStart = serverSubstring.index(nameMatch.lowerBound, offsetBy: 6)
-                    let nameEnd = serverSubstring.index(nameMatch.upperBound, offsetBy: -1)
-                    let name = String(serverSubstring[nameStart..<nameEnd])
-                    result[name] = machineId
-                }
-
-                // Store by machineId as well for backup matching
-                result[machineId] = machineId
-            }
-        }
-
-        return result
+        PlexServerSelectionPolicy.machineIdentifierLookup(from: data)
     }
 
     // MARK: - Library Browsing
@@ -373,7 +385,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         size: Int = 100,
         sort: String? = nil,
         type: Int? = nil,
-        includeGuids: Bool = false
+        includeGuids: Bool = true
     ) async throws -> (items: [PlexMetadata], totalSize: Int?) {
         guard var components = URLComponents(string: "\(serverURL)/library/sections/\(sectionId)/all") else {
             throw PlexAPIError.invalidURL
@@ -424,7 +436,13 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         authToken: String,
         ratingKey: String
     ) async throws -> PlexMetadata {
-        guard let url = URL(string: "\(serverURL)/library/metadata/\(ratingKey)") else {
+        guard var components = URLComponents(string: "\(serverURL)/library/metadata/\(ratingKey)") else {
+            throw PlexAPIError.invalidURL
+        }
+        // Always request external IDs (tmdb://…) so callers can resolve TMDb
+        // status, watchlist guids, etc.
+        components.queryItems = [URLQueryItem(name: "includeGuids", value: "1")]
+        guard let url = components.url else {
             throw PlexAPIError.invalidURL
         }
 
@@ -456,7 +474,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "includeChapters", value: "1"),
             URLQueryItem(name: "includeRelated", value: "0"),
             URLQueryItem(name: "includeMarkers", value: "1"),
-            URLQueryItem(name: "includeCollections", value: "1")
+            URLQueryItem(name: "includeCollections", value: "1"),
+            URLQueryItem(name: "includeGuids", value: "1")
         ]
 
         guard let url = components.url else {
@@ -577,9 +596,10 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             throw PlexAPIError.invalidURL
         }
 
-        // Include markers for skip intro/credits functionality
+        // Include markers for skip intro/credits functionality + external IDs.
         components.queryItems = [
-            URLQueryItem(name: "includeMarkers", value: "1")
+            URLQueryItem(name: "includeMarkers", value: "1"),
+            URLQueryItem(name: "includeGuids", value: "1")
         ]
 
         guard let url = components.url else {
@@ -746,7 +766,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         }
 
         components.queryItems = [
-            URLQueryItem(name: "X-Plex-Container-Size", value: "\(limit)")
+            URLQueryItem(name: "X-Plex-Container-Size", value: "\(limit)"),
+            URLQueryItem(name: "includeGuids", value: "1")
         ]
 
         guard let url = components.url else {
@@ -771,7 +792,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         }
 
         components.queryItems = [
-            URLQueryItem(name: "count", value: "\(count)")
+            URLQueryItem(name: "count", value: "\(count)"),
+            URLQueryItem(name: "includeGuids", value: "1")
         ]
 
         guard let url = components.url else {
@@ -795,7 +817,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         }
 
         components.queryItems = [
-            URLQueryItem(name: "count", value: "\(count)")
+            URLQueryItem(name: "count", value: "\(count)"),
+            URLQueryItem(name: "includeGuids", value: "1")
         ]
 
         guard let url = components.url else {
@@ -883,34 +906,17 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         state: String = "playing",
         duration: Int? = nil
     ) async throws {
-        guard var components = URLComponents(string: "\(serverURL)/:/timeline") else {
-            throw PlexAPIError.invalidURL
-        }
-
-        var queryItems = [
-            URLQueryItem(name: "key", value: "/library/metadata/\(ratingKey)"),
-            URLQueryItem(name: "ratingKey", value: ratingKey),
-            URLQueryItem(name: "time", value: "\(timeMs)"),
-            URLQueryItem(name: "state", value: state),
-            URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library")
-        ]
-
-        if let dur = duration {
-            queryItems.append(URLQueryItem(name: "duration", value: "\(dur)"))
-        }
-
-        components.queryItems = queryItems
-
-        guard let url = components.url else {
-            throw PlexAPIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-
-        for (key, value) in plexHeaders(authToken: authToken) {
-            request.addValue(value, forHTTPHeaderField: key)
-        }
+        let request = try PlexWatchStateRequestFactory.timelineRequest(
+            serverURL: serverURL,
+            authToken: authToken,
+            ratingKey: ratingKey,
+            timeMs: timeMs,
+            state: state,
+            durationMs: duration,
+            method: "POST",
+            headerPolicy: .standardPlex,
+            includeClientQueryItems: false
+        )
 
         let (_, response) = try await session.data(for: request)
 
@@ -926,24 +932,14 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         authToken: String,
         ratingKey: String
     ) async throws {
-        guard var components = URLComponents(string: "\(serverURL)/:/scrobble") else {
-            throw PlexAPIError.invalidURL
-        }
-
-        components.queryItems = [
-            URLQueryItem(name: "key", value: ratingKey),
-            URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library")
-        ]
-
-        guard let url = components.url else {
-            throw PlexAPIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        for (key, value) in plexHeaders(authToken: authToken) {
-            request.addValue(value, forHTTPHeaderField: key)
-        }
+        let request = try PlexWatchStateRequestFactory.scrobbleRequest(
+            serverURL: serverURL,
+            authToken: authToken,
+            ratingKey: ratingKey,
+            action: .watched,
+            method: "PUT",
+            headerPolicy: .standardPlex
+        )
 
         let (_, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
@@ -962,24 +958,14 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         authToken: String,
         ratingKey: String
     ) async throws {
-        guard var components = URLComponents(string: "\(serverURL)/:/unscrobble") else {
-            throw PlexAPIError.invalidURL
-        }
-
-        components.queryItems = [
-            URLQueryItem(name: "key", value: ratingKey),
-            URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library")
-        ]
-
-        guard let url = components.url else {
-            throw PlexAPIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        for (key, value) in plexHeaders(authToken: authToken) {
-            request.addValue(value, forHTTPHeaderField: key)
-        }
+        let request = try PlexWatchStateRequestFactory.scrobbleRequest(
+            serverURL: serverURL,
+            authToken: authToken,
+            ratingKey: ratingKey,
+            action: .unwatched,
+            method: "PUT",
+            headerPolicy: .standardPlex
+        )
 
         let (_, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
@@ -1081,58 +1067,48 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
     /// Get audio playlists
     func getPlaylists(serverURL: String, authToken: String, playlistType: String = "audio") async throws -> [PlexMetadata] {
-        guard var components = URLComponents(string: "\(serverURL)/playlists") else {
-            throw PlexAPIError.invalidURL
-        }
-
-        components.queryItems = [
-            URLQueryItem(name: "playlistType", value: playlistType),
-            URLQueryItem(name: "X-Plex-Token", value: authToken)
-        ]
-
-        guard let url = components.url else { throw PlexAPIError.invalidURL }
-
-        let data = try await requestData(url, method: "GET", headers: ["X-Plex-Token": authToken])
+        let request = try buildHeaderFirstPMSRequest(
+            serverURL: serverURL,
+            authToken: authToken,
+            path: "/playlists",
+            queryItems: [
+                URLQueryItem(name: "playlistType", value: playlistType)
+            ]
+        )
+        let data = try await requestData(request)
         let container = try JSONDecoder().decode(PlexMediaContainerWrapper.self, from: data)
         return container.MediaContainer.Metadata ?? []
     }
 
     /// Get items in a playlist
     func getPlaylistItems(serverURL: String, authToken: String, ratingKey: String) async throws -> [PlexMetadata] {
-        guard var components = URLComponents(string: "\(serverURL)/playlists/\(ratingKey)/items") else {
-            throw PlexAPIError.invalidURL
-        }
-
-        components.queryItems = [
-            URLQueryItem(name: "X-Plex-Token", value: authToken)
-        ]
-
-        guard let url = components.url else { throw PlexAPIError.invalidURL }
-
-        let data = try await requestData(url, method: "GET", headers: ["X-Plex-Token": authToken])
+        let request = try buildHeaderFirstPMSRequest(
+            serverURL: serverURL,
+            authToken: authToken,
+            path: "/playlists/\(ratingKey)/items"
+        )
+        let data = try await requestData(request)
         let container = try JSONDecoder().decode(PlexMediaContainerWrapper.self, from: data)
         return container.MediaContainer.Metadata ?? []
     }
 
     /// Create a new playlist
     func createPlaylist(serverURL: String, authToken: String, title: String, type: String = "audio", ratingKeys: [String]) async throws {
-        guard var components = URLComponents(string: "\(serverURL)/playlists") else {
-            throw PlexAPIError.invalidURL
-        }
-
         let uri = "server://\(PlexAPI.clientIdentifier)/com.plexapp.plugins.library/library/metadata/\(ratingKeys.joined(separator: ","))"
 
-        components.queryItems = [
-            URLQueryItem(name: "type", value: type),
-            URLQueryItem(name: "title", value: title),
-            URLQueryItem(name: "smart", value: "0"),
-            URLQueryItem(name: "uri", value: uri),
-            URLQueryItem(name: "X-Plex-Token", value: authToken)
-        ]
-
-        guard let url = components.url else { throw PlexAPIError.invalidURL }
-
-        _ = try await requestData(url, method: "POST", headers: ["X-Plex-Token": authToken])
+        let request = try buildHeaderFirstPMSRequest(
+            serverURL: serverURL,
+            authToken: authToken,
+            path: "/playlists",
+            method: "POST",
+            queryItems: [
+                URLQueryItem(name: "type", value: type),
+                URLQueryItem(name: "title", value: title),
+                URLQueryItem(name: "smart", value: "0"),
+                URLQueryItem(name: "uri", value: uri)
+            ]
+        )
+        _ = try await requestData(request)
     }
 
     // MARK: - Streaming URLs
@@ -2351,6 +2327,48 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
     // MARK: - Helper Methods
 
+    private func buildHeaderFirstURL(
+        baseURLString: String,
+        path: String,
+        queryItems: [URLQueryItem]
+    ) throws -> URL {
+        let base = baseURLString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let normalizedPath = path.hasPrefix("/") ? path : "/\(path)"
+
+        guard var components = URLComponents(string: "\(base)\(normalizedPath)") else {
+            throw PlexAPIError.invalidURL
+        }
+
+        let forbiddenTokenQueryNames = ["x-plex-token", "token", "authtoken", "accesstoken"]
+        let headerFirstQueryItems = queryItems.filter { item in
+            !forbiddenTokenQueryNames.contains(item.name.lowercased())
+        }
+        components.queryItems = headerFirstQueryItems.isEmpty ? nil : headerFirstQueryItems
+
+        guard let url = components.url else {
+            throw PlexAPIError.invalidURL
+        }
+
+        return url
+    }
+
+    private func buildHeaderFirstRequest(
+        url: URL,
+        authToken: String,
+        method: String,
+        userId: Int? = nil
+    ) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = defaultTimeout
+
+        for (key, value) in plexHeaders(authToken: authToken, userId: userId) {
+            request.addValue(value, forHTTPHeaderField: key)
+        }
+
+        return request
+    }
+
     /// Generate standard Plex API headers
     /// - Parameters:
     ///   - authToken: The authentication token
@@ -2405,7 +2423,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
             print("🌐 PlexNetwork: ❌ Could not decode home users JSON response")
         } catch {
-            print("🌐 PlexNetwork: v2 endpoint failed: \(error)")
+            print("🌐 PlexNetwork: v2 endpoint failed: \(SensitiveDataRedactor.redact(String(describing: error)) ?? "")")
         }
 
         // Fallback: try the XML endpoint and parse it
@@ -2556,10 +2574,11 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             // the user as guest, returning 401 on per-section/streaming
             // endpoints. Returning nil instead lets the caller (selectUser)
             // keep the per-server token that selectServer set up at sign-in.
-            print("🌐 PlexNetwork: ⚠️ No per-server token found for serverURL=\(serverURL); returning nil to preserve existing selectedServerToken")
+            let safeServerURL = SensitiveDataRedactor.redact(serverURL) ?? SensitiveDataRedactor.redactedURLValue
+            print("🌐 PlexNetwork: ⚠️ No per-server token found for serverURL=\(safeServerURL); returning nil to preserve existing selectedServerToken")
             return nil
         } catch {
-            print("🌐 PlexNetwork: ❌ Failed to get server access token: \(error) — returning nil")
+            print("🌐 PlexNetwork: ❌ Failed to get server access token: \(SensitiveDataRedactor.redact(String(describing: error)) ?? "") — returning nil")
             return nil
         }
     }
@@ -2568,23 +2587,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     /// POST https://plex.tv/api/v2/home/users/{uuid}/switch
     /// - Returns: The user's auth token if switch succeeded, nil if PIN invalid
     func switchToHomeUser(userUUID: String, pin: String?, authToken: String) async throws -> String? {
-        guard let url = URL(string: "\(PlexAPI.baseUrl)/api/v2/home/users/\(userUUID)/switch") else {
-            throw PlexAPIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-
-        // Add standard Plex headers
-        for (key, value) in plexHeaders(authToken: authToken) {
-            request.addValue(value, forHTTPHeaderField: key)
-        }
-
-        // Add PIN if provided
-        if let pin = pin, !pin.isEmpty {
-            request.addValue(pin, forHTTPHeaderField: "X-Plex-Pin")
-        }
+        let request = try buildHomeUserSwitchRequest(userUUID: userUUID, pin: pin, authToken: authToken)
 
         let (data, response) = try await session.data(for: request)
 
@@ -2602,7 +2605,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
                let userToken = json["authToken"] as? String {
                 return userToken
             }
-            return authToken // Fall back to original token
+            print("🌐 PlexNetwork: ❌ Plex Home switch response did not include a user token")
+            return nil
         case 401:
             print("🌐 PlexNetwork: ❌ Invalid PIN")
             return nil

@@ -59,7 +59,9 @@ struct RivuletApp: App {
             options.tracesSampleRate = 1.0
             options.attachStacktrace = true
             options.enableAutoSessionTracking = true
-            options.enableCaptureFailedRequests = true
+            options.enableCaptureFailedRequests = false
+            options.enableNetworkBreadcrumbs = false
+            options.enableNetworkTracking = false
             options.enableSwizzling = true
             options.enableAppHangTracking = true
             options.appHangTimeoutInterval = 2
@@ -74,13 +76,51 @@ struct RivuletApp: App {
                    message.contains("Code=-999") || (message.contains("NSURLErrorDomain") && message.contains("cancelled")) {
                     return nil
                 }
-                return event
+                return RivuletApp.sanitizeSentryEvent(event)
             }
         }
         #endif
 
         // NowPlayingService disabled — AVPlayerViewController handles Now Playing natively.
         // NowPlayingService.shared.initialize()
+    }
+
+    private nonisolated static func sanitizeSentryEvent(_ event: Event) -> Event {
+        if let tags = event.tags {
+            event.tags = SensitiveDataRedactor.redact(headers: tags)
+        }
+        if let extra = event.extra {
+            event.extra = SensitiveDataRedactor.redact(metadata: extra)
+        }
+        if let context = event.context {
+            event.context = context.reduce(into: [:]) { result, entry in
+                result[entry.key] = SensitiveDataRedactor.redact(metadata: entry.value)
+            }
+        }
+        if let breadcrumbs = event.breadcrumbs {
+            breadcrumbs.forEach { breadcrumb in
+                breadcrumb.message = SensitiveDataRedactor.redact(breadcrumb.message)
+                if let data = breadcrumb.data {
+                    breadcrumb.data = SensitiveDataRedactor.redact(metadata: data)
+                }
+            }
+        }
+        if let exceptions = event.exceptions {
+            exceptions.forEach { exception in
+                exception.value = SensitiveDataRedactor.redact(exception.value)
+            }
+        }
+        if let message = event.message {
+            message.message = SensitiveDataRedactor.redact(message.message)
+        }
+        if let request = event.request {
+            request.url = SensitiveDataRedactor.redact(request.url)
+            request.queryString = SensitiveDataRedactor.redact(request.queryString)
+            if let headers = request.headers {
+                request.headers = SensitiveDataRedactor.redact(headers: headers)
+            }
+        }
+        return event
     }
 
     var sharedModelContainer: ModelContainer = {

@@ -69,6 +69,9 @@ struct PreviewOverlayHost: View {
 
     @State private var selectedIndex: Int
     @State private var stateMachine = PreviewStateMachine()
+    // E3-PR3: gate structural preview motion on Reduce Motion (instant state
+    // change preserves destination/info; only the animation is suppressed).
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var vignetteVisible = false
     @State private var metadataVisible = false
     @State private var expandedChromeVisible = false
@@ -264,7 +267,7 @@ struct PreviewOverlayHost: View {
 
         Task { @MainActor in
             await Task.yield()
-            withAnimation(previewEntryAnimation) {
+            withAnimation(PreviewMotionPolicy.animation(previewEntryAnimation, reduceMotion: reduceMotion)) {
                 stateMachine.completeEntryMorph()
             }
 
@@ -318,7 +321,7 @@ struct PreviewOverlayHost: View {
         stateMachine.beginPaging()
 
         // Drive both card motion and inner-image parallax from one progress track.
-        withAnimation(previewPagingAnimation) {
+        withAnimation(PreviewMotionPolicy.animation(previewPagingAnimation, reduceMotion: reduceMotion)) {
             selectedIndex = nextIndex
             pagingProgress = 1
         }
@@ -372,7 +375,7 @@ struct PreviewOverlayHost: View {
             }
         }
 
-        withAnimation(previewExpandAnimation) {
+        withAnimation(PreviewMotionPolicy.animation(previewExpandAnimation, reduceMotion: reduceMotion)) {
             stateMachine.beginExpand()
             focusedArea = nil
         }
@@ -449,7 +452,7 @@ struct PreviewOverlayHost: View {
 
                 var collapsedState = nextState
                 collapsedState.setMotionLocked(true)
-                withAnimation(previewExpandAnimation) {
+                withAnimation(PreviewMotionPolicy.animation(previewExpandAnimation, reduceMotion: reduceMotion)) {
                     stateMachine = collapsedState
                 }
 

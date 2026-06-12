@@ -75,17 +75,21 @@ struct TVSidebarView: View {
         Binding(
             get: { selectedTab },
             set: { newTab in
-                // Block tab changes while in nested navigation (carousel,
-                // detail view, or deep Settings sub-page).
-                guard !nestedNavState.isNested, !nestedNavState.isSettingsSubPage else { return }
-
-                if newTab == .account {
-                    if profileManager.hasMultipleProfiles {
-                        showProfileSwitcher = true
-                    }
-                    return  // Never store .account — selectedTab stays unchanged
+                // Deterministic resolution lives in SidebarNavigationPolicy
+                // (E2-PR6); this binding only applies the resolved effect.
+                switch SidebarNavigationPolicy.resolveSelection(
+                    requested: newTab,
+                    isNested: nestedNavState.isNested,
+                    isSettingsSubPage: nestedNavState.isSettingsSubPage,
+                    hasMultipleProfiles: profileManager.hasMultipleProfiles
+                ) {
+                case .select(let tab):
+                    selectedTab = tab
+                case .presentProfileSwitcher:
+                    showProfileSwitcher = true
+                case .ignore:
+                    break
                 }
-                selectedTab = newTab
             }
         )
     }
@@ -108,8 +112,12 @@ struct TVSidebarView: View {
             // before the library TabSection structurally appears. Sitting on
             // Settings while a new TabSection materializes above it wedges
             // sidebar focus on tvOS (sidebar opens then immediately closes).
-            if !old && new && selectedTab == .settings {
-                selectedTab = .home
+            if let fallback = SidebarNavigationPolicy.fallbackTab(
+                currentlySelected: selectedTab,
+                freshlySignedIn: !old && new,
+                discoverHidden: false
+            ) {
+                selectedTab = fallback
             }
             if old && !new {
                 // Clear watchlist state on logout
@@ -125,8 +133,12 @@ struct TVSidebarView: View {
         // If the user disables the Discover tab while it's selected, bounce
         // back to Home so they're not stuck on a hidden tab.
         .onChange(of: showDiscoverTab) { _, shown in
-            if !shown && selectedTab == .discover {
-                selectedTab = .home
+            if let fallback = SidebarNavigationPolicy.fallbackTab(
+                currentlySelected: selectedTab,
+                freshlySignedIn: false,
+                discoverHidden: !shown
+            ) {
+                selectedTab = fallback
             }
         }
         .task(id: authManager.hasCredentials) {

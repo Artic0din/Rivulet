@@ -549,7 +549,7 @@ final class DirectPlayPipeline {
         let breadcrumb = Breadcrumb(level: .info, category: "direct_play")
         breadcrumb.message = "DirectPlay Load"
         breadcrumb.data = [
-            "stream_url": url.absoluteString,
+            "stream_url": SensitiveDataRedactor.redactedURLValue,
             "stream_host": url.host ?? "unknown",
             "duration": duration,
             "has_dv": demuxer.hasDolbyVision,

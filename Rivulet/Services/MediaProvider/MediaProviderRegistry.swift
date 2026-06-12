@@ -68,7 +68,8 @@ final class MediaProviderRegistry {
             machineIdentifier: machineID,
             displayName: displayName,
             serverURL: serverURL,
-            authToken: token
+            authToken: token,
+            watchlistService: PlexWatchlistService.shared
         )
         register(provider)
     }

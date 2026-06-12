@@ -115,6 +115,72 @@ final class PlexAuthManagerTests: XCTestCase {
         )
     }
 
+    // MARK: - Credential Lifecycle Policy Tests
+
+    func testCredentialLifecyclePolicyInvalidatesOnUnauthorizedResponses() {
+        XCTAssertTrue(PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: PlexAPIError.httpError(statusCode: 401, data: nil)))
+        XCTAssertTrue(PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: PlexAPIError.httpError(statusCode: 403, data: nil)))
+        XCTAssertTrue(PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: PlexAPIError.authenticationFailed))
+    }
+
+    func testCredentialLifecyclePolicyPreservesCredentialsForNonAuthFailures() {
+        XCTAssertFalse(PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: PlexAPIError.httpError(statusCode: 500, data: nil)))
+        XCTAssertFalse(PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: PlexAPIError.notFound))
+        XCTAssertFalse(PlexCredentialLifecyclePolicy.shouldInvalidateCredentials(for: PlexAPIError.invalidResponse))
+    }
+
+    func testCredentialLifecycleFailureMessageDoesNotExposeSensitiveInputs() {
+        let token = "secret-token-123"
+        let message = PlexCredentialLifecyclePolicy.userFacingInvalidationMessage(
+            role: .account,
+            diagnostic: "HTTP 401 for X-Plex-Token=\(token)"
+        )
+
+        XCTAssertFalse(message.contains(token))
+        XCTAssertFalse(message.contains("X-Plex-Token"))
+        XCTAssertEqual(message, "Your Plex session expired. Please sign in again.")
+    }
+
+    @MainActor
+    func testApplyHomeUserServerTokenRegistersUserScopedCredentialWithoutReplacingBaseServerCredential() async throws {
+        let manager = PlexAuthManager.shared
+        let providerID = "plex:machine-home-token-test"
+        let homeUser = PlexHomeUser(
+            id: 2,
+            uuid: "managed-user-token-test",
+            title: "Managed",
+            admin: false,
+            restricted: true
+        )
+        var server = try makeServer(
+            name: "Home Test Server",
+            clientIdentifier: "client-home-token-test",
+            accessToken: "base-server-token"
+        )
+        server.machineIdentifier = "machine-home-token-test"
+
+        CredentialRegistry.shared.unregisterServer(providerID: providerID)
+        await CredentialRegistry.shared.clearToken(for: .server(providerID: providerID))
+        await CredentialRegistry.shared.clearToken(for: .serverUser(providerID: providerID, userID: homeUser.uuid))
+        try await CredentialRegistry.shared.setToken("base-server-token", for: .server(providerID: providerID))
+        manager.selectedServer = server
+        manager.selectedServerToken = "base-server-token"
+
+        await manager.applyHomeUserServerToken("home-user-server-token", for: homeUser)
+
+        XCTAssertEqual(manager.selectedServerToken, "home-user-server-token")
+        XCTAssertEqual(CredentialRegistry.shared.token(for: .server(providerID: providerID)), "base-server-token")
+        XCTAssertEqual(
+            CredentialRegistry.shared.token(for: .serverUser(providerID: providerID, userID: homeUser.uuid)),
+            "home-user-server-token"
+        )
+        XCTAssertTrue(CredentialRegistry.shared.serverUserCredentialScopes.contains(.serverUser(providerID: providerID, userID: homeUser.uuid)))
+
+        CredentialRegistry.shared.unregisterServer(providerID: providerID)
+        await CredentialRegistry.shared.clearToken(for: .server(providerID: providerID))
+        await CredentialRegistry.shared.clearToken(for: .serverUser(providerID: providerID, userID: homeUser.uuid))
+    }
+
     // MARK: - Connection Scoring Tests
 
     func testPrefersLocalNonRelayConnections() {
@@ -310,6 +376,49 @@ final class PlexAuthManagerTests: XCTestCase {
     private func buildPlexDirectURL(address: String, port: Int, machineIdentifier: String) -> String {
         let ipWithDashes = address.replacingOccurrences(of: ".", with: "-")
         return "https://\(ipWithDashes).\(machineIdentifier).plex.direct:\(port)"
+    }
+
+    private func makeServer(
+        name: String,
+        clientIdentifier: String,
+        accessToken: String
+    ) throws -> PlexDevice {
+        let json = """
+        {
+          "name": "\(name)",
+          "product": "Plex Media Server",
+          "productVersion": "1.0",
+          "platform": "macOS",
+          "platformVersion": "15.0",
+          "device": "Mac",
+          "clientIdentifier": "\(clientIdentifier)",
+          "createdAt": "0",
+          "lastSeenAt": "0",
+          "provides": "server",
+          "accessToken": "\(accessToken)",
+          "owned": true,
+          "home": true,
+          "synced": false,
+          "relay": false,
+          "presence": true,
+          "httpsRequired": false,
+          "publicAddressMatches": true,
+          "dnsRebindingProtection": false,
+          "natLoopbackSupported": true,
+          "connections": [
+            {
+              "protocol": "https",
+              "address": "192.168.1.20",
+              "port": 32400,
+              "uri": "https://192.168.1.20:32400",
+              "local": true,
+              "relay": false,
+              "IPv6": false
+            }
+          ]
+        }
+        """
+        return try JSONDecoder().decode(PlexDevice.self, from: Data(json.utf8))
     }
 }
 
