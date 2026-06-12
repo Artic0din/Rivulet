@@ -1797,24 +1797,28 @@ final class UniversalPlayerViewModel: ObservableObject {
     private func buildExternalMetadata() -> [AVMetadataItem] {
         var items: [AVMetadataItem] = []
 
-        // Title
-        let displayTitle: String
+        // Title view above the scrubber (per AVKit docs): commonIdentifierTitle is
+        // the big bold title; iTunesMetadataTrackSubTitle is the smaller line above
+        // it. Match the Apple TV reference:
+        //   Movie   → title = "Project Hail Mary",  subtitle = "2026"
+        //   Episode → title = "Law & Order: SVU",    subtitle = "2026 · S27, E12 · Hubris"
+        let headerTitle: String
+        let headerSubtitle: String?
         if metadata.type == "episode" {
-            let seasonNum = metadata.parentIndex ?? 0
-            let episodeNum = metadata.index ?? 0
-            let epTitle = metadata.title ?? ""
-            displayTitle = "S\(seasonNum) E\(episodeNum) · \(epTitle)"
+            headerTitle = metadata.grandparentTitle ?? (metadata.title ?? "")
+            // No year here: AVKit prepends the release year (from the creation
+            // date) to this subtitle line, so including it would duplicate.
+            var parts: [String] = []
+            if let s = metadata.parentIndex, let e = metadata.index { parts.append("S\(s), E\(e)") }
+            if let epTitle = metadata.title, !epTitle.isEmpty { parts.append(epTitle) }
+            headerSubtitle = parts.isEmpty ? nil : parts.joined(separator: " · ")
         } else {
-            displayTitle = metadata.title ?? ""
+            headerTitle = metadata.title ?? ""
+            headerSubtitle = nil   // AVKit shows the release year alone under the title
         }
-        items.append(makeMetadataItem(.commonIdentifierTitle, value: displayTitle))
-
-        // Show name (for episodes)
-        if metadata.type == "episode", let showName = metadata.grandparentTitle {
-            items.append(makeMetadataItem(
-                .iTunesMetadataTrackSubTitle,
-                value: showName
-            ))
+        items.append(makeMetadataItem(.commonIdentifierTitle, value: headerTitle))
+        if let headerSubtitle {
+            items.append(makeMetadataItem(.iTunesMetadataTrackSubTitle, value: headerSubtitle))
         }
 
         // Description
@@ -1838,11 +1842,18 @@ final class UniversalPlayerViewModel: ObservableObject {
             ))
         }
 
-        // Year
-        if let year = metadata.year {
+        // Release year — drives the year AVKit shows in the title view + Info line.
+        // AVKit reads commonIdentifierCreationDate via its `dateValue`, so it must
+        // be a real `Date` (NSDate). A bare year String is ignored → AVKit falls
+        // back to the HLS-transcode asset's "now" creation date (2026); a full ISO
+        // string mis-renders to a serial number. We build Jan 1 of the release year.
+        let releaseYearInt: Int? = metadata.year
+            ?? metadata.originallyAvailableAt.flatMap { Int($0.prefix(4)) }
+        if let year = releaseYearInt,
+           let releaseDate = Calendar.current.date(from: DateComponents(year: year, month: 1, day: 1)) {
             items.append(makeMetadataItem(
                 .commonIdentifierCreationDate,
-                value: String(year)
+                value: releaseDate as NSDate
             ))
         }
 
@@ -1994,6 +2005,10 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// Build navigation markers from Plex chapters (preferred) or intro/credits markers (fallback).
     private func buildNavigationMarkers() -> [AVNavigationMarkersGroup]? {
+        // Chapters tab is movie-only — the Apple TV reference shows TV episodes
+        // with Info + Continue Watching only (no Chapters).
+        guard metadata.type != "episode" else { return nil }
+
         // Prefer real chapters from the media file (Plex returns these at metadata level, not Part level)
         let chapters = metadata.Chapter ?? []
         if !chapters.isEmpty {
