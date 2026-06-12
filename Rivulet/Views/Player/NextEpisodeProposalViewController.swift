@@ -79,16 +79,10 @@ final class NextEpisodeProposalViewController: AVContentProposalViewController {
 
     /// Shrink the playing video into a 16:9 window in the TOP-RIGHT corner so the
     /// next-episode artwork and card fill the rest. AVKit animates the player view
-    /// to this frame on presentation.
+    /// to this frame on presentation. The card masks a matching hole so the video
+    /// (which AVKit composites *behind* the proposal view) shows through.
     override var preferredPlayerViewFrame: CGRect {
-        let bounds = view.bounds
-        let width = bounds.width * 0.34
-        let height = width * 9.0 / 16.0
-        let margin = bounds.width * 0.06
-        return CGRect(x: bounds.width - width - margin,
-                      y: margin,
-                      width: width,
-                      height: height)
+        PlayerFrameMetrics.frame(in: view.bounds.size)
     }
 
     // MARK: - Countdown (driven by the system's scheduled auto-accept date)
@@ -110,6 +104,27 @@ final class NextEpisodeProposalViewController: AVContentProposalViewController {
         let remaining = max(0, date.timeIntervalSinceNow)
         if model.total == nil { model.total = max(remaining, 1) }
         model.remaining = remaining
+    }
+}
+
+// MARK: - Shared player-frame geometry
+
+/// The shrunk-video rectangle, shared by `preferredPlayerViewFrame` (where AVKit
+/// places the player) and the card's mask (where it punches a hole for it).
+private enum PlayerFrameMetrics {
+    static let widthFraction: CGFloat = 0.34
+    static let marginFraction: CGFloat = 0.06
+    static let aspect: CGFloat = 9.0 / 16.0
+    static let cornerRadius: CGFloat = 14
+
+    static func frame(in size: CGSize) -> CGRect {
+        let width = size.width * widthFraction
+        let height = width * aspect
+        let margin = size.width * marginFraction
+        return CGRect(x: size.width - width - margin,
+                      y: margin,
+                      width: width,
+                      height: height)
     }
 }
 
@@ -137,26 +152,54 @@ private struct ProposalCardView: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            // Next-episode still, full-bleed.
+        GeometryReader { geo in
+            let videoRect = PlayerFrameMetrics.frame(in: geo.size)
+            ZStack(alignment: .bottomLeading) {
+                // Next-episode still + legibility gradient, with a transparent
+                // hole cut where the shrunk video sits (AVKit composites the
+                // player behind us, so the hole reveals it).
+                background
+                    .mask(holeMask(full: geo.size, hole: videoRect))
+
+                overlay
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .ignoresSafeArea()
+        .onAppear { focused = true }
+    }
+
+    @ViewBuilder private var background: some View {
+        ZStack {
             if let image = model.previewImage {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .ignoresSafeArea()
             } else {
-                Color.black.ignoresSafeArea()
+                Color.black
             }
-
             // Darken bottom-left for text legibility.
             LinearGradient(
                 colors: [.black.opacity(0.85), .black.opacity(0.35), .clear],
                 startPoint: .bottomLeading,
                 endPoint: .topTrailing
             )
-            .ignoresSafeArea()
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 14) {
+    /// Opaque everywhere except a rounded hole at `hole` (even-odd fill).
+    private func holeMask(full: CGSize, hole: CGRect) -> some View {
+        Path { p in
+            p.addRect(CGRect(origin: .zero, size: full))
+            p.addRoundedRect(in: hole,
+                             cornerSize: CGSize(width: PlayerFrameMetrics.cornerRadius,
+                                                height: PlayerFrameMetrics.cornerRadius))
+        }
+        .fill(style: FillStyle(eoFill: true))
+    }
+
+    private var overlay: some View {
+        VStack(alignment: .leading, spacing: 14) {
                 Text(model.showTitle)
                     .font(.system(size: 56, weight: .heavy))
                     .foregroundStyle(.white)
@@ -176,12 +219,10 @@ private struct ProposalCardView: View {
                                   action: onPlayNext)
                     .focused($focused)
                     .padding(.top, 16)
-            }
-            .padding(.leading, 90)
-            .padding(.bottom, 90)
-            .padding(.trailing, 40)
         }
-        .onAppear { focused = true }
+        .padding(.leading, 90)
+        .padding(.bottom, 90)
+        .padding(.trailing, 40)
     }
 }
 
