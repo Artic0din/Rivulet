@@ -17,7 +17,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
 
-    @StateObject private var dataStore = PlexDataStore.shared
+    private let dataStore = PlexDataStore.shared
     @StateObject private var authManager = PlexAuthManager.shared
     #if DEBUG
     @State private var showSplash = false

@@ -9,8 +9,8 @@ import SwiftUI
 
 struct LibrarySettingsView: View {
     @Binding var focusedSettingId: String?
-    @StateObject private var dataStore = PlexDataStore.shared
-    @StateObject private var librarySettings = LibrarySettingsManager.shared
+    private let dataStore = PlexDataStore.shared
+    private let librarySettings = LibrarySettingsManager.shared
     @State private var reorderingLibrary: PlexLibrary?
 
     init(focusedSettingId: Binding<String?> = .constant(nil)) {
@@ -178,7 +178,7 @@ private struct LibraryVisibilityRow: View {
 
 struct LibraryReorderSheet: View {
     let library: PlexLibrary
-    @ObservedObject var librarySettings: LibrarySettingsManager
+    let librarySettings: LibrarySettingsManager
     let allLibraries: [PlexLibrary]
     let onDismiss: () -> Void
 

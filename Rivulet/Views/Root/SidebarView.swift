@@ -28,7 +28,7 @@ struct SidebarView: View {
     @Binding var selectedSection: SidebarSection?
     @Query private var serverConfigs: [ServerConfiguration]
     @StateObject private var authManager = PlexAuthManager.shared
-    @StateObject private var dataStore = PlexDataStore.shared
+    private let dataStore = PlexDataStore.shared
 
     /// Check if Plex is authenticated
     private var hasPlexServer: Bool {

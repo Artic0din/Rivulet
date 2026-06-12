@@ -27,12 +27,11 @@ private func headingDescription(_ heading: UIFocusHeading) -> String {
 
 struct TVSidebarView: View {
     @StateObject private var authManager = PlexAuthManager.shared
-    @StateObject private var dataStore = PlexDataStore.shared
-    // Observed directly so the sidebar rebuilds when library visibility/order
-    // changes in settings. `dataStore.visibleMediaLibraries` reads from this
-    // manager but holds it as a plain `let`, so without an explicit
-    // @StateObject here, SwiftUI doesn't see hiddenLibraryKeys updates.
-    @StateObject private var librarySettings = LibrarySettingsManager.shared
+    private let dataStore = PlexDataStore.shared
+    // Read directly so the sidebar rebuilds when library visibility/order
+    // changes in settings. Both are @Observable singletons, so reading their
+    // properties in `body` establishes observation through a plain `let`.
+    private let librarySettings = LibrarySettingsManager.shared
     @StateObject private var liveTVDataStore = LiveTVDataStore.shared
     @StateObject private var profileManager = PlexUserProfileManager.shared
     @StateObject private var nestedNavState = NestedNavigationState()

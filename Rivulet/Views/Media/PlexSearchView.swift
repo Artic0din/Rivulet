@@ -9,7 +9,7 @@ import SwiftUI
 
 struct PlexSearchView: View {
     @StateObject private var authManager = PlexAuthManager.shared
-    @StateObject private var dataStore = PlexDataStore.shared
+    private let dataStore = PlexDataStore.shared
     @Environment(\.nestedNavigationState) private var nestedNavState
 
     @State private var query = ""

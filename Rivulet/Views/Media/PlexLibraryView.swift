@@ -17,7 +17,7 @@ struct PlexLibraryView: View {
     @Environment(\.uiScale) private var scale
 
     @StateObject private var authManager = PlexAuthManager.shared
-    @ObservedObject private var librarySettings = LibrarySettingsManager.shared
+    private let librarySettings = LibrarySettingsManager.shared
     private let dataStore = PlexDataStore.shared
     @AppStorage("showLibraryHero") private var showLibraryHero = false
     @AppStorage("showLibraryRecommendations") private var showLibraryRecommendations = true

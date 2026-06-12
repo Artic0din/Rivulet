@@ -12,7 +12,9 @@ import os.log
 private let homeLog = Logger(subsystem: "com.rivulet.app", category: "PlexHome")
 
 struct PlexHomeView: View {
-    @StateObject private var dataStore = PlexDataStore.shared
+    // PlexDataStore is an @Observable singleton; SwiftUI tracks the property
+    // reads in `body`, so a plain `let` observes correctly (no @StateObject).
+    private let dataStore = PlexDataStore.shared
     @StateObject private var authManager = PlexAuthManager.shared
     @StateObject private var watchlistService = PlexWatchlistService.shared
     // E2-PR4: hero is the canonical, default Home experience (hero-first).
@@ -24,7 +26,6 @@ struct PlexHomeView: View {
     @State private var selectedMusicItem: PlexMetadata?   // music-only routing (artist/album)
     @State private var heroItems: [PlexMetadata] = []
     @State private var heroCurrentIndex: Int = 0
-    @State private var cachedProcessedHubs: [PlexHub] = []  // Memoized to avoid recalculation on every render
     @State private var recommendations: [PlexMetadata] = []
     @State private var isLoadingRecommendations = false
     @State private var recommendationsError: String?
@@ -55,37 +56,7 @@ struct PlexHomeView: View {
     private let recommendationService = PersonalizedRecommendationService.shared
     private let recommendationsContentType: RecommendationContentType = .moviesAndShows
 
-    // MARK: - Processed Hubs (merged Continue Watching + library-specific sections)
-
-    /// Computes processed hubs with library-specific sections
-    /// - Continue Watching comes from `dataStore.continueWatchingHub` (Plex's dedicated
-    ///   `/hubs/continueWatching` endpoint, matching the Plex app exactly)
-    /// - Other hubs come from library-specific endpoints with library name prefixes
-    private func computeProcessedHubs(from hubsToProcess: [PlexHub]) -> [PlexHub] {
-        // "Recently Added" hub for each library shown on Home (video and, when the
-        // Music feature is enabled, music). Music libraries are skipped while the
-        // feature is hidden. Continue Watching prominence is handled by
-        // HomeRowOrderingPolicy below.
-        var followingRows: [PlexHub] = []
-        for library in dataStore.librariesForHomeScreen {
-            if !FeatureFlags.musicEnabled && library.isMusicLibrary {
-                continue
-            }
-            if let hubs = dataStore.libraryHubs[library.key] {
-                if let recentlyAddedHub = hubs.first(where: { isRecentlyAddedHub($0) }) {
-                    var transformedHub = recentlyAddedHub
-                    transformedHub.title = "Recently Added \(library.title)"
-                    followingRows.append(transformedHub)
-                }
-            }
-        }
-
-        // Continue Watching is always the most prominent content row (E2-PR5).
-        return HomeRowOrderingPolicy.order(
-            continueWatching: dataStore.continueWatchingHub,
-            followingRows: followingRows
-        )
-    }
+    // MARK: - Hub Classification
 
     /// Check if a hub is a Continue Watching or On Deck hub
     private func isContinueWatchingHub(_ hub: PlexHub) -> Bool {
@@ -170,19 +141,15 @@ struct PlexHomeView: View {
                 }
             }
             .onAppear {
-                homeLog.info("PlexHomeView onAppear — cachedHubs=\(self.cachedProcessedHubs.count), dataStoreHubs=\(self.dataStore.hubs.count)")
+                homeLog.info("PlexHomeView onAppear — processedHubs=\(self.dataStore.processedHubs.count), dataStoreHubs=\(self.dataStore.hubs.count)")
                 // Initial render state never fires .onChange, so open the
                 // data-load interval here when we appear mid-load.
                 if homeRenderState.phase == .loading {
                     HomePerformance.tracer.beginHomeDataLoad()
                 }
-                // Initial computation of processed hubs
-                if cachedProcessedHubs.isEmpty && !dataStore.hubs.isEmpty {
-                    cachedProcessedHubs = computeProcessedHubs(from: dataStore.hubs)
-                    homeLog.info("Computed \(self.cachedProcessedHubs.count) processed hubs on appear, setting isHomeContentReady=\(!self.cachedProcessedHubs.isEmpty)")
-                    dataStore.isHomeContentReady = !cachedProcessedHubs.isEmpty
-                }
-                // Only select hero if we don't have one yet
+                // processedHubs is maintained by the store (recomputed in its
+                // didSet as hub/library data lands), so there's nothing to seed
+                // here. Only select hero if we don't have one yet.
                 if heroItems.isEmpty {
                     selectHeroItems()
                 }
@@ -214,25 +181,21 @@ struct PlexHomeView: View {
                     HomePerformance.tracer.endHomeDataLoad()
                 }
             }
-            .onChange(of: dataStore.hubsVersion) { _, _ in
-                // Recompute cached hubs when global hub data changes (for Continue Watching)
-                cachedProcessedHubs = computeProcessedHubs(from: dataStore.hubs)
-                // Refresh hero items when hubs change; stable comparison prevents unnecessary rebuilds.
+            .onChange(of: dataStore.hubs.count) { _, _ in
+                // Refresh hero when the hub set gains/loses content (first load,
+                // sign-out). processedHubs itself is recomputed by the store.
                 selectHeroItems()
             }
-            .onChange(of: dataStore.libraryHubsVersion) { _, _ in
-                // Recompute when library-specific hubs change
-                cachedProcessedHubs = computeProcessedHubs(from: dataStore.hubs)
-            }
             .onChange(of: dataStore.librarySettings.librariesShownOnHome) { _, _ in
-                // Recompute and reload when Home library selection changes
-                cachedProcessedHubs = computeProcessedHubs(from: dataStore.hubs)
+                // Home library selection lives on librarySettings (a separate
+                // object), so the store can't observe it. Drive the recompute
+                // explicitly and load any newly-needed library hubs.
+                dataStore.recomputeProcessedHubs()
                 Task { await dataStore.loadLibraryHubsIfNeeded() }
             }
-            .onChange(of: cachedProcessedHubs.isEmpty) { _, isEmpty in
-                homeLog.info("cachedProcessedHubs.isEmpty changed to \(isEmpty) (count: \(self.cachedProcessedHubs.count))")
-                dataStore.isHomeContentReady = !isEmpty
-                if !isEmpty {
+            .onChange(of: dataStore.isHomeContentReady) { _, isReady in
+                homeLog.info("isHomeContentReady changed to \(isReady) (processedHubs: \(self.dataStore.processedHubs.count))")
+                if isReady {
                     HomePerformance.tracer.markHomeComplete()
                 }
             }
@@ -771,7 +734,7 @@ struct PlexHomeView: View {
                             .frame(height: 0)
                             .id("contentRowsAnchor")
 
-                        ForEach(Array(cachedProcessedHubs.enumerated()), id: \.element.id) { index, hub in
+                        ForEach(Array(dataStore.processedHubs.enumerated()), id: \.element.id) { index, hub in
                             if let items = hub.Metadata, !items.isEmpty {
                                 let isContinueWatching = isContinueWatchingHub(hub)
                                 InfiniteContentRow(

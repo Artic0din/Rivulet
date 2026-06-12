@@ -6,25 +6,25 @@
 //
 
 import Foundation
-import Combine
 
 /// Manages user preferences for library visibility and ordering in the sidebar
 /// Settings are stored per-user for Plex Home accounts
 @MainActor
-class LibrarySettingsManager: ObservableObject {
+@Observable
+final class LibrarySettingsManager {
     static let shared = LibrarySettingsManager()
 
-    // MARK: - Published State
+    // MARK: - Observed State
 
     /// Library keys that are hidden from the sidebar
-    @Published var hiddenLibraryKeys: Set<String> {
+    var hiddenLibraryKeys: Set<String> {
         didSet {
             saveHiddenLibraries()
         }
     }
 
     /// Ordered list of library keys (libraries not in this list appear at the end in default order)
-    @Published var libraryOrder: [String] {
+    var libraryOrder: [String] {
         didSet {
             saveLibraryOrder()
         }
@@ -32,21 +32,21 @@ class LibrarySettingsManager: ObservableObject {
 
     /// Library keys that should appear on the Home screen (separate from sidebar visibility)
     /// Empty set means "not yet configured" - all visible libraries will be shown by default
-    @Published var librariesShownOnHome: Set<String> {
+    var librariesShownOnHome: Set<String> {
         didSet {
             saveHomeLibraries()
         }
     }
 
     /// Track whether Home visibility has been explicitly configured
-    @Published private(set) var homeVisibilityConfigured: Bool {
+    private(set) var homeVisibilityConfigured: Bool {
         didSet {
             userDefaults.set(homeVisibilityConfigured, forKey: currentKey(homeVisibilityConfiguredBaseKey))
         }
     }
 
     /// Per-library sort options (libraryKey -> sort option)
-    @Published var librarySortOptions: [String: LibrarySortOption] = [:] {
+    var librarySortOptions: [String: LibrarySortOption] = [:] {
         didSet {
             saveSortOptions()
         }
@@ -62,7 +62,7 @@ class LibrarySettingsManager: ObservableObject {
     private let sortOptionsBaseKey = "librarySortOptions"
 
     /// Current user ID for per-user settings (nil = default/no profile)
-    private var currentUserId: Int?
+    @ObservationIgnored private var currentUserId: Int?
 
     /// UserDefaults key under which `PlexUserProfileManager` persists the
     /// last-selected Plex Home profile id (`selectedUserIdKey` there).
