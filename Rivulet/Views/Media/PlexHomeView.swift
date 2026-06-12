@@ -62,9 +62,15 @@ struct PlexHomeView: View {
     ///   `/hubs/continueWatching` endpoint, matching the Plex app exactly)
     /// - Other hubs come from library-specific endpoints with library name prefixes
     private func computeProcessedHubs(from hubsToProcess: [PlexHub]) -> [PlexHub] {
-        // "Recently Added" hub for each library shown on Home (video and music).
+        // "Recently Added" hub for each library shown on Home (video and, when the
+        // Music feature is enabled, music). Music libraries are skipped while the
+        // feature is hidden. Continue Watching prominence is handled by
+        // HomeRowOrderingPolicy below.
         var followingRows: [PlexHub] = []
         for library in dataStore.librariesForHomeScreen {
+            if !FeatureFlags.musicEnabled && library.isMusicLibrary {
+                continue
+            }
             if let hubs = dataStore.libraryHubs[library.key] {
                 if let recentlyAddedHub = hubs.first(where: { isRecentlyAddedHub($0) }) {
                     var transformedHub = recentlyAddedHub
