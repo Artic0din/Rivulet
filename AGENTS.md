@@ -1,7 +1,9 @@
-# Rivulet — Claude Context
+# Rivulet — Agent Context
 
 Rivulet is a tvOS media client for Plex and IPTV. SwiftUI throughout.
 Two video players: **RPlayer** (custom FFmpeg → `AVSampleBufferDisplayLayer` pipeline, full HDR/Dolby Vision) and **AVPlayer** (`NativePlayerViewController`) for natively-playable routes. `ContentRouter.plan(...)` picks the route per item.
+
+This is the portable, tool-agnostic rule set (Codex, Gemini, and other agents read `AGENTS.md`; the Claude agent reads `CLAUDE.md`, which mirrors this plus Claude-specific skill routing). Keep the two in sync when changing shared rules.
 
 ## Quick reference
 
@@ -10,16 +12,6 @@ Two video players: **RPlayer** (custom FFmpeg → `AVSampleBufferDisplayLayer` p
 - **UI:** SwiftUI; Liquid Glass aesthetic (tvOS 26)
 - **Tests:** `RivuletTests/` — mixed XCTest + Swift Testing. New tests use Swift Testing (`import Testing`); migrate XCTest opportunistically.
 - **Errors:** Sentry (`RivuletApp.swift`).
-
-## Skills (use them — don't restate their content here)
-
-- `tvos` + `tvos-design-guidelines` — focus engine, Siri Remote, 10-foot UI.
-- `plex` — Plex HTTP API: auth, metadata, transcode decisions, Discover, Live TV.
-- `swiftui-specialist` (Apple official) — authoritative SwiftUI structure/data-flow/identity patterns.
-- `swift-concurrency` — actors, Sendable, strict-concurrency; mandatory for pipeline/player work.
-- `device-interaction` (Apple official) — verify behavior in the simulator before claiming done.
-- `c-bounds-safety` (Apple official) — applies to the FFmpeg C interop layer.
-- `swiftui-whats-new-27` — only when the project moves to SDK 27 (`@State` becomes a macro; source-incompatible).
 
 ## Project structure
 
@@ -51,7 +43,7 @@ Key entry points: `Services/Plex/Playback/RivuletPlayer.swift`, `Pipeline/Conten
 - **Codec routing:** H.264/H.265/DV P5/P8.1 → VideoToolbox. DV P7/P8.6 → `HEVCNALParser` extracts RPU → `DoviProfileConverter`/`LibdoviWrapper` rewrites to P8.1 → VideoToolbox. AAC/AC3/EAC3 → passthrough. TrueHD/DTS/PCM/FLAC → `FFmpegAudioDecoder` → 32-bit float PCM. SRT/ASS → text overlay; PGS/DVB → `FFmpegSubtitleDecoder` bitmap (PGS uses `end_display_time = UInt32.max` as "until next cue").
 - **Measured timing constants — do NOT change without re-measuring:** read-loop throttle ~0.8 s (matches `AVSampleBufferDisplayLayer`'s ~1 s forward window for 4K HEVC); preroll ~450 ms DV / ~200 ms otherwise; AirPlay startup buffer 1.0 s; seeks within 0.5 s deduplicated. A/V clock is the synchronizer's — never add explicit video delay.
 
-Full deep reference (routing policy, Sentry patterns, DV internals) lives in `Docs/RIVULET_PLAYER.md` — **local-only, gitignored** (internal dev doc); not present in fresh clones.
+A fuller deep reference (`Docs/RIVULET_PLAYER.md`) is kept **local-only / gitignored** as an internal dev doc; it is not in fresh clones, so do not depend on it.
 
 ## tvOS focus — house patterns
 
@@ -86,4 +78,6 @@ xcodebuild -scheme Rivulet -destination 'platform=tvOS,name=My Apple TV' build  
 
 - Reuse existing app patterns first; verify Apple/Plex APIs against docs before coding — never guess.
 - Player pipeline changes: validate with real playback, not build success.
-- Git/PR rules (fork-only remotes, conventional commits, review workflow): `CLAUDE.local.md`.
+- Conventional commits (`{type}({scope}): {description}`); feature branches + PRs; never push to `main`; never auto-merge.
+- AI review: Codex + Sentry/Seer only. Reply on each review thread individually, resolve, wait for re-review; never push fixes silently.
+- Push/PR only against the `Artic0din/Rivulet` fork (`origin`), never `upstream`.
