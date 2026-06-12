@@ -60,6 +60,7 @@
 - Epic 2 PR3: deterministic, stale-safe Home focus restoration (`FocusRestorationPolicy` + hardened `FocusMemory`); focus is no longer stranded on items removed by a refresh. No visual change.
 - Epic 2 PR1: shared home render-state model (`RenderState`/`RenderStateResolver`) and reusable `ContentStateView` surface replacing inline Home loading/empty/error views (visually identical).
 - Epic 2 PR1: first-party `os_signpost` performance harness (`HomePerformanceTracer`) for launch→home, render-state, and hero-preparation timings (Epic 0 PERF budgets).
+- Hardened the HLS fallback path in `HLSSegmentFetcher`: replaced two force-unwraps (`throw lastError!`, `variants.max(...)!`) with safe fallbacks so the fallback fetch — which only runs when playback is already failing — cannot trap if its control flow changes (audit finding M-3).
 
 ## 1.0.0 (Build 48)
 
