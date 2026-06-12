@@ -1891,8 +1891,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     private func fetchSeasonPosterIfNeeded() async {
         guard metadata.type == "episode" else { return }
 
-        // Try season poster first, then show poster
-        let posterPath = metadata.parentThumb ?? metadata.grandparentThumb
+        // Info-tab / Now Playing artwork for episodes is the episode still
+        // (matches the Apple TV reference, which shows the episode thumb for TV;
+        // movies use their poster via loadingThumbImage). Fall back to season/show.
+        let posterPath = metadata.thumb ?? metadata.parentThumb ?? metadata.grandparentThumb
         guard let path = posterPath else { return }
 
         let urlString = "\(serverURL)\(path)?X-Plex-Token=\(authToken)"
@@ -4122,6 +4124,71 @@ final class UniversalPlayerViewModel: ObservableObject {
         // Safe to allow post-video detection now: the old time observer has been
         // replaced and time values reflect the new episode's actual position.
         hasTriggeredPostVideo = false
+    }
+
+    /// Play an arbitrary item (e.g. a Continue Watching selection from the native
+    /// player's info tab), swapping the current item in place. Resumes from the
+    /// item's saved position unless `fromBeginning` is true. Mirrors the swap
+    /// performed by `playNextEpisode()`.
+    func playItem(_ item: PlexMetadata, fromBeginning: Bool = false) async {
+        // Ignore re-selecting the item already playing (unless restarting).
+        if item.ratingKey == metadata.ratingKey && !fromBeginning { return }
+
+        await markCurrentAsWatched()
+
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        countdownSeconds = 0
+        isCountdownPaused = false
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            postVideoState = .hidden
+            videoFrameState = .fullscreen
+        }
+
+        metadata = item
+
+        // Continue Watching resumes from the saved position; else start at 0.
+        if !fromBeginning, let ms = item.viewOffset, ms > 0 {
+            startOffset = TimeInterval(ms) / 1000.0
+        } else {
+            startOffset = nil
+        }
+
+        hasSkippedIntro = false
+        skippedCreditsIds.removeAll()
+        skippedCommercialIds.removeAll()
+        introSkipCountdownTimer?.invalidate()
+        introSkipCountdownTimer = nil
+        introSkipCountdownSeconds = 0
+        userDeclinedIntroAutoSkip = false
+        nextEpisode = nil
+        avContentProposal = nil
+
+        if metadata.parentRatingKey == nil || metadata.index == nil {
+            await fetchFullMetadataIfNeeded()
+        }
+
+        resetPreparedStreamContext()
+        clearPreloadedData()
+        await ensureStreamURLPrepared()
+        await startPlayback()
+        hasTriggeredPostVideo = false
+    }
+
+    /// Fetch the user's Continue Watching (On Deck) items for the native player's
+    /// custom info tab. Excludes the item currently playing.
+    func loadContinueWatchingItems() async -> [PlexMetadata] {
+        do {
+            let items = try await PlexNetworkManager.shared.getOnDeck(
+                serverURL: serverURL,
+                authToken: authToken
+            )
+            return items.filter { $0.ratingKey != metadata.ratingKey }
+        } catch {
+            print("[Player] Continue Watching fetch failed: \(error)")
+            return []
+        }
     }
 
     /// Dismiss post-video overlay and return to fullscreen video

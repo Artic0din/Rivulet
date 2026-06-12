@@ -70,7 +70,11 @@ final class NativePlayerViewController: UIViewController, AVPlayerViewController
             .first()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] avPlayer in
-                self?.avPlayerVC.player = avPlayer
+                guard let self else { return }
+                self.avPlayerVC.player = avPlayer
+                // Apply AFTER the player exists — AVKit resets infoViewActions
+                // when the item loads, so a viewDidLoad-time set gets wiped.
+                self.installInfoViewActions()
             }
             .store(in: &cancellables)
 
@@ -100,6 +104,30 @@ final class NativePlayerViewController: UIViewController, AVPlayerViewController
                 self?.avPlayerVC.player?.currentItem?.nextContentProposal = proposal
             }
             .store(in: &cancellables)
+
+        // Custom "Continue Watching" content tab in the info panel.
+        avPlayerVC.customInfoViewControllers = [
+            ContinueWatchingInfoViewController(viewModel: viewModel)
+        ]
+    }
+
+    /// Info tab actions: "From Beginning" + "Go to Movie/Show" (the reference
+    /// shows up to two actions on the Info tab's trailing edge).
+    private func installInfoViewActions() {
+        let fromBeginning = UIAction(title: "From Beginning",
+                                     image: UIImage(systemName: "play.fill")) { [weak self] _ in
+            self?.avPlayerVC.player?.seek(to: .zero)
+            self?.avPlayerVC.player?.play()
+        }
+        let isEpisode = viewModel.metadata.type == "episode"
+        let goTo = UIAction(title: isEpisode ? "Go to Show" : "Go to Movie",
+                            image: UIImage(systemName: "info.circle")) { [weak self] _ in
+            // Dismiss the player modal from its PRESENTER — calling dismiss() on
+            // self only closes AVKit's info panel. The presenter tears down the
+            // whole player; viewDidDisappear then fires onDismiss.
+            (self?.presentingViewController ?? self)?.dismiss(animated: true)
+        }
+        avPlayerVC.infoViewActions = [fromBeginning, goTo]
     }
 
     // MARK: - AVPlayerViewControllerDelegate (Up Next content proposals)
