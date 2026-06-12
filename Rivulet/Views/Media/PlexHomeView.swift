@@ -119,7 +119,7 @@ struct PlexHomeView: View {
         NavigationStack {
             ZStack {
                 if !authManager.hasCredentials {
-                    notConnectedView
+                    NotConnectedView()
                 } else {
                     // Shared render-state surface (E2-PR1). Default empty/error
                     // presentations replicate the prior inline views; both retry
@@ -693,7 +693,18 @@ struct PlexHomeView: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     // Connection error banner (when showing cached content while offline)
                     if !authManager.isConnected {
-                        connectionErrorBanner
+                        HomeConnectionErrorBanner(
+                            message: authManager.connectionError.map { HomeErrorPresentation.userFacingMessage(for: $0) }
+                                ?? "Showing cached content",
+                            onRetry: {
+                                Task {
+                                    await authManager.verifyAndFixConnection()
+                                    if authManager.isConnected {
+                                        await dataStore.refreshHubs()
+                                    }
+                                }
+                            }
+                        )
                     }
 
                     // Hero overlay: transparent foreground (logo/buttons/dots)
@@ -802,7 +813,20 @@ struct PlexHomeView: View {
 
                         // Recommendations at the end of all library hubs
                         if enablePersonalizedRecommendations {
-                            recommendationsSection
+                            HomeRecommendationsSection(
+                                isLoading: isLoadingRecommendations,
+                                recommendations: recommendations,
+                                errorMessage: recommendationsError.map { HomeErrorPresentation.userFacingMessage(for: $0) },
+                                serverURL: authManager.selectedServerURL ?? "",
+                                authToken: authManager.selectedServerToken ?? "",
+                                onItemSelected: { item in selectItem(item) },
+                                onRefresh: { await refreshRecommendations(force: true) },
+                                onPreviewRequested: { request in
+                                    rowPreviewRequest = request
+                                    showPreviewCover = true
+                                },
+                                restorePreviewFocusTarget: $previewRestoreTarget
+                            )
                         }
                     }
                     .padding(.top, heroActive ? 0 : 48)
@@ -817,132 +841,6 @@ struct PlexHomeView: View {
             .ignoresSafeArea(.container, edges: heroActive ? [.top, .horizontal] : [])
             } // ScrollViewReader
         }
-    }
-
-    // MARK: - Connection Error Banner
-
-    private var connectionErrorBanner: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(.yellow)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Cannot Connect to Plex")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.white)
-
-                Text(authManager.connectionError.map { HomeErrorPresentation.userFacingMessage(for: $0) } ?? "Showing cached content")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.white.opacity(0.7))
-            }
-
-            Spacer()
-
-            Button("Retry") {
-                Task {
-                    await authManager.verifyAndFixConnection()
-                    if authManager.isConnected {
-                        await dataStore.refreshHubs()
-                    }
-                }
-            }
-            .buttonStyle(AppStoreButtonStyle())
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.yellow.opacity(0.15))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(.yellow.opacity(0.3), lineWidth: 1)
-                )
-        )
-        .padding(.horizontal, ScaledDimensions.rowHorizontalPadding)
-        .padding(.top, 100)  // Below safe area
-        .padding(.bottom, 20)
-    }
-
-    // MARK: - Recommendations Section
-
-    @ViewBuilder
-    private var recommendationsSection: some View {
-        if isLoadingRecommendations && recommendations.isEmpty {
-            HStack(spacing: 14) {
-                ProgressView()
-                    .progressViewStyle(.circular)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Building Personalized Recommendations")
-                        .font(.system(size: 22, weight: .semibold))
-                    Text("This may take a moment")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, ScaledDimensions.rowHorizontalPadding)
-            .padding(.top, 24)
-        } else if let error = recommendationsError {
-            HStack(spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.yellow)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Personalized Recommendations Unavailable")
-                        .font(.system(size: 20, weight: .semibold))
-                    Text(HomeErrorPresentation.userFacingMessage(for: error))
-                        .font(.system(size: 16))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                Spacer()
-                Button("Retry") {
-                    Task { await refreshRecommendations(force: true) }
-                }
-                .buttonStyle(AppStoreButtonStyle())
-            }
-            .padding(.horizontal, ScaledDimensions.rowHorizontalPadding)
-            .padding(.vertical, 12)
-        } else if !recommendations.isEmpty {
-            InfiniteContentRow(
-                rowID: "home:recommendations",
-                title: "Personalized Recommendations",
-                initialItems: recommendations,
-                hubKey: nil,
-                hubIdentifier: nil,
-                serverURL: authManager.selectedServerURL ?? "",
-                authToken: authManager.selectedServerToken ?? "",
-                contextMenuSource: .other,
-                onItemSelected: { item in selectItem(item) },
-                onRefreshNeeded: {
-                    await refreshRecommendations(force: true)
-                },
-                onPreviewRequested: { request in
-                    rowPreviewRequest = request
-                    showPreviewCover = true
-                },
-                restorePreviewFocusTarget: $previewRestoreTarget
-            )
-        }
-    }
-
-    // MARK: - Not Connected View
-
-    private var notConnectedView: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "server.rack")
-                .font(.system(size: 48, weight: .light))
-                .foregroundStyle(.secondary)
-
-            Text("Not Connected")
-                .font(.title2)
-                .fontWeight(.medium)
-
-            Text("Connect to your Plex server in Settings.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Navigation Helpers
@@ -1456,6 +1354,142 @@ struct InfiniteContentRow: View {
         }
 
         isLoadingMore = false
+    }
+}
+
+// MARK: - Home Sections
+
+/// Shown when no Plex credentials are present. Static content, no inputs —
+/// its own `View` type so the Home body doesn't re-evaluate it.
+struct NotConnectedView: View {
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "server.rack")
+                .font(.system(size: 48, weight: .light))
+                .foregroundStyle(.secondary)
+
+            Text("Not Connected")
+                .font(.title2)
+                .fontWeight(.medium)
+
+            Text("Connect to your Plex server in Settings.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Cached-content banner shown when the server is unreachable. Takes the
+/// resolved message and a retry closure as narrow inputs, so it invalidates
+/// only when the message changes — not on every Home update.
+struct HomeConnectionErrorBanner: View {
+    let message: String
+    let onRetry: () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.yellow)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Cannot Connect to Plex")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+
+                Text(message)
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+
+            Spacer()
+
+            Button("Retry", action: onRetry)
+                .buttonStyle(AppStoreButtonStyle())
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.yellow.opacity(0.15))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(.yellow.opacity(0.3), lineWidth: 1)
+                )
+        )
+        .padding(.horizontal, ScaledDimensions.rowHorizontalPadding)
+        .padding(.top, 100)  // Below safe area
+        .padding(.bottom, 20)
+    }
+}
+
+/// Personalized Recommendations section: loading, error, or the content row.
+/// Inputs are the already-resolved state (the error string is pre-formatted by
+/// the parent), keeping this view's invalidation surface narrow.
+struct HomeRecommendationsSection: View {
+    let isLoading: Bool
+    let recommendations: [PlexMetadata]
+    let errorMessage: String?
+    let serverURL: String
+    let authToken: String
+    let onItemSelected: (PlexMetadata) -> Void
+    let onRefresh: () async -> Void
+    let onPreviewRequested: (PreviewRequest) -> Void
+    @Binding var restorePreviewFocusTarget: PreviewSourceTarget?
+
+    var body: some View {
+        if isLoading && recommendations.isEmpty {
+            HStack(spacing: 14) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Building Personalized Recommendations")
+                        .font(.system(size: 22, weight: .semibold))
+                    Text("This may take a moment")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, ScaledDimensions.rowHorizontalPadding)
+            .padding(.top, 24)
+        } else if let errorMessage {
+            HStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.yellow)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Personalized Recommendations Unavailable")
+                        .font(.system(size: 20, weight: .semibold))
+                    Text(errorMessage)
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer()
+                Button("Retry") {
+                    Task { await onRefresh() }
+                }
+                .buttonStyle(AppStoreButtonStyle())
+            }
+            .padding(.horizontal, ScaledDimensions.rowHorizontalPadding)
+            .padding(.vertical, 12)
+        } else if !recommendations.isEmpty {
+            InfiniteContentRow(
+                rowID: "home:recommendations",
+                title: "Personalized Recommendations",
+                initialItems: recommendations,
+                hubKey: nil,
+                hubIdentifier: nil,
+                serverURL: serverURL,
+                authToken: authToken,
+                contextMenuSource: .other,
+                onItemSelected: onItemSelected,
+                onRefreshNeeded: { await onRefresh() },
+                onPreviewRequested: onPreviewRequested,
+                restorePreviewFocusTarget: $restorePreviewFocusTarget
+            )
+        }
     }
 }
 
