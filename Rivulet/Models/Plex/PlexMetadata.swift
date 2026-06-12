@@ -139,7 +139,12 @@ struct PlexMarker: Codable, Identifiable, Sendable {
 /// Plex media item metadata (movie, show, season, episode)
 struct PlexMetadata: Codable, Identifiable, Hashable, Sendable {
     var id: String {
-        return ratingKey ?? UUID().uuidString
+        // Deterministic identity: must stay stable across SwiftUI body
+        // evaluations. A `UUID()` fallback would mint a fresh id on every
+        // read, so ForEach/sheet(item:)/navigationDestination(item:) would
+        // see the item as replaced each pass. Fall through stable server
+        // fields instead of synthesizing a random id.
+        return ratingKey ?? key ?? guid ?? "plexMetadata"
     }
 
     // MARK: - Core Identifiers

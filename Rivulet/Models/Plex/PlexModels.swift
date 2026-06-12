@@ -201,7 +201,12 @@ struct PlexExtrasContainerWrapper: Codable, Sendable {
 // MARK: - Hub (for home screen sections)
 
 struct PlexHub: Codable, Identifiable, Sendable {
-    var id: String { hubIdentifier ?? title ?? UUID().uuidString }
+    // Deterministic identity: must stay stable across SwiftUI body
+    // evaluations. A `UUID()` fallback would mint a fresh id on every read,
+    // making ForEach treat the hub as removed-and-reinserted (lost focus/
+    // scroll state, broken animations). Fall through stable server fields
+    // instead and only land on a constant for the degenerate all-nil case.
+    var id: String { hubIdentifier ?? key ?? hubKey ?? title ?? "plexHub" }
     var hubIdentifier: String?
     var title: String?
     var type: String?

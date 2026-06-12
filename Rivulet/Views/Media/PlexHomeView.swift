@@ -1259,7 +1259,12 @@ struct InfiniteContentRow: View {
             // Horizontal scroll of posters with infinite loading
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: ScaledDimensions.rowItemSpacing) {  // Lazy to avoid laying out hundreds of offscreen posters
-                    ForEach(Array(items.enumerated()), id: \.element.ratingKey) { index, item in
+                    // Identity keys on PlexMetadata.id (deterministic, non-optional)
+                    // rather than the optional `ratingKey`: items lacking a rating
+                    // key would otherwise all collapse to the same `nil` id and
+                    // violate ForEach uniqueness. `.enumerated()` still supplies the
+                    // index for the load-more trigger below.
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         Button {
                             if isContinueWatching {
                                 onPlayItem?(item)
