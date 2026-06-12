@@ -67,6 +67,11 @@ final class NextEpisodeProposalViewController: AVContentProposalViewController {
             model.episodeLine = proposal.metadata
                 .first { $0.identifier == .commonIdentifierDescription }?
                 .value as? String ?? ""
+            if let logoString = proposal.metadata
+                .first(where: { $0.identifier == .commonIdentifierSource })?
+                .value as? String {
+                model.logoURL = URL(string: logoString)
+            }
         }
         startCountdown()
     }
@@ -112,19 +117,18 @@ final class NextEpisodeProposalViewController: AVContentProposalViewController {
 /// The shrunk-video rectangle, shared by `preferredPlayerViewFrame` (where AVKit
 /// places the player) and the card's mask (where it punches a hole for it).
 private enum PlayerFrameMetrics {
-    static let widthFraction: CGFloat = 0.34
-    static let marginFraction: CGFloat = 0.06
+    static let widthFraction: CGFloat = 0.25      // of screen width
+    static let rightMarginFraction: CGFloat = 0.042  // of screen width
+    static let topMarginFraction: CGFloat = 0.056    // of screen height
     static let aspect: CGFloat = 9.0 / 16.0
-    static let cornerRadius: CGFloat = 14
+    static let cornerRadius: CGFloat = 12
 
     static func frame(in size: CGSize) -> CGRect {
         let width = size.width * widthFraction
         let height = width * aspect
-        let margin = size.width * marginFraction
-        return CGRect(x: size.width - width - margin,
-                      y: margin,
-                      width: width,
-                      height: height)
+        let x = size.width - width - size.width * rightMarginFraction
+        let y = size.height * topMarginFraction
+        return CGRect(x: x, y: y, width: width, height: height)
     }
 }
 
@@ -135,6 +139,7 @@ private final class ProposalCardModel: ObservableObject {
     @Published var showTitle: String = ""
     @Published var episodeLine: String = ""
     @Published var previewImage: UIImage?
+    @Published var logoURL: URL?
     @Published var remaining: TimeInterval?
     @Published var total: TimeInterval?
 
@@ -178,11 +183,12 @@ private struct ProposalCardView: View {
             } else {
                 Color.black
             }
-            // Darken bottom-left for text legibility.
+            // Soft bottom-left darkening for legibility — kept light so the
+            // artwork stays bright like the Apple TV reference.
             LinearGradient(
-                colors: [.black.opacity(0.85), .black.opacity(0.35), .clear],
+                colors: [.black.opacity(0.75), .clear],
                 startPoint: .bottomLeading,
-                endPoint: .topTrailing
+                endPoint: UnitPoint(x: 0.55, y: 0.45)
             )
         }
     }
@@ -199,42 +205,67 @@ private struct ProposalCardView: View {
     }
 
     private var overlay: some View {
-        VStack(alignment: .leading, spacing: 14) {
-                Text(model.showTitle)
-                    .font(.system(size: 56, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .shadow(radius: 8)
-
-                if !model.episodeLine.isEmpty {
-                    Text(model.episodeLine)
-                        .font(.title3.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .lineLimit(1)
-                        .shadow(radius: 6)
+        VStack(alignment: .leading, spacing: 16) {
+            // Show branding: clearLogo if available, else styled show title.
+            if let logoURL = model.logoURL {
+                AsyncImage(url: logoURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: 380, maxHeight: 108, alignment: .leading)
+                            .shadow(radius: 8)
+                    default:
+                        showTitleText
+                    }
                 }
+            } else {
+                showTitleText
+            }
 
-                NextEpisodeButton(progress: model.progress,
-                                  isFocused: focused,
-                                  action: onPlayNext)
-                    .focused($focused)
-                    .padding(.top, 16)
+            if !model.episodeLine.isEmpty {
+                Text(model.episodeLine)
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
+                    .shadow(radius: 6)
+            }
+
+            NextEpisodeButton(progress: model.progress,
+                              isFocused: focused,
+                              action: onPlayNext)
+                .focused($focused)
+                .padding(.top, 4)
         }
-        .padding(.leading, 90)
-        .padding(.bottom, 90)
+        .padding(.leading, 80)
+        .padding(.bottom, 64)
         .padding(.trailing, 40)
+    }
+
+    private var showTitleText: some View {
+        Text(model.showTitle)
+            .font(.system(size: 44, weight: .heavy))
+            .foregroundStyle(.white)
+            .lineLimit(2)
+            .shadow(radius: 8)
     }
 }
 
-/// Pill button with the countdown ring drawn around the play glyph.
+/// Pill button with the countdown ring drawn around the play glyph. Uses the
+/// app-wide `AppStoreActionButtonStyle` (same as the hero/detail action pills) so
+/// focus is handled consistently — white fill + black content on focus, glass at
+/// rest, token-driven scale — instead of the tvOS default focus halo.
 private struct NextEpisodeButton: View {
     let progress: Double
     let isFocused: Bool
     let action: () -> Void
 
+    private let height: CGFloat = 72
+
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 18) {
+            HStack(spacing: 14) {
                 ZStack {
                     Circle()
                         .stroke(foreground.opacity(0.3), lineWidth: 3)
@@ -243,26 +274,20 @@ private struct NextEpisodeButton: View {
                         .stroke(foreground, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                     Image(systemName: "play.fill")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(foreground)
+                        .font(.system(size: 16, weight: .bold))
                 }
-                .frame(width: 38, height: 38)
+                .frame(width: 34, height: 34)
                 .animation(.linear(duration: 0.5), value: progress)
 
                 Text("Next Episode")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(foreground)
+                    .font(.system(size: 26, weight: .semibold))
             }
-            .padding(.horizontal, 30)
-            .padding(.vertical, 18)
-            .background {
-                Capsule().fill(isFocused ? Color.white : Color.white.opacity(0.18))
-            }
+            .padding(.horizontal, 28)
+            .frame(height: height)
         }
-        .buttonStyle(.plain)
-        .scaleEffect(isFocused ? 1.06 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isFocused)
+        .buttonStyle(AppStoreActionButtonStyle(isFocused: isFocused, cornerRadius: height / 2))
     }
 
+    /// Ring/glyph color tracks the style's fill (black on white focus fill).
     private var foreground: Color { isFocused ? .black : .white }
 }

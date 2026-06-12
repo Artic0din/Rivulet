@@ -3866,7 +3866,20 @@ final class UniversalPlayerViewModel: ObservableObject {
             title: showTitle,
             previewImage: preview
         )
-        proposal.metadata = [makeMetadataItem(.commonIdentifierDescription, value: episodeLine)]
+        var proposalMetadata: [AVMetadataItem] = [
+            makeMetadataItem(.commonIdentifierDescription, value: episodeLine)
+        ]
+        // Show clearLogo (same series for current + next episode). Fetched raw so
+        // PNG transparency is preserved; the card renders it in place of text.
+        // Stashed in `.commonIdentifierSource` (a valid system identifier — custom
+        // keyspaces are rejected by AVMetadataItem validation).
+        if let logoPath = next.clearLogoPath ?? metadata.clearLogoPath {
+            let logoURL = "\(serverURL)\(logoPath)?X-Plex-Token=\(authToken)"
+            proposalMetadata.append(
+                makeMetadataItem(.commonIdentifierSource, value: logoURL)
+            )
+        }
+        proposal.metadata = proposalMetadata
         // Negative interval → auto-accept measured from the end of the item.
         proposal.automaticAcceptanceInterval = -autoAdvanceTailSeconds
         // url left nil: the delegate's didAccept routes through playNextEpisode()
@@ -3876,11 +3889,12 @@ final class UniversalPlayerViewModel: ObservableObject {
         print("[UpNext] published proposal: \"\(showTitle) · \(episodeLine)\" transition=\(Int(transition))s autoAccept=\(proposal.automaticAcceptanceInterval)s")
     }
 
-    /// "S{season} E{episode} · {title}" for the card's secondary line.
+    /// "S{season}, E{episode} · {title}" for the card's secondary line
+    /// (matches the Apple TV app's formatting).
     private func nextEpisodeLine(for ep: PlexMetadata) -> String {
         if let s = ep.parentIndex, let e = ep.index {
             let title = ep.title ?? ""
-            return title.isEmpty ? "S\(s) E\(e)" : "S\(s) E\(e) · \(title)"
+            return title.isEmpty ? "S\(s), E\(e)" : "S\(s), E\(e) · \(title)"
         }
         return ep.title ?? ""
     }
