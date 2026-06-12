@@ -314,6 +314,11 @@ final class UniversalPlayerViewModel: ObservableObject {
     @Published var postVideoState: PostVideoState = .hidden
     @Published var videoFrameState: VideoFrameState = .fullscreen
     @Published private(set) var nextEpisode: PlexMetadata?
+    /// Native tvOS "Up Next" proposal for the AVPlayer route. Published here and
+    /// attached to the current `AVPlayerItem` by `NativePlayerViewController`. When
+    /// non-nil, the native banner is the *sole* advance mechanism — the custom
+    /// post-video overlay is suppressed (see `handlePlaybackEnded`).
+    @Published private(set) var avContentProposal: AVContentProposal?
     @Published private(set) var recommendations: [PlexMetadata] = []
     @Published var countdownSeconds: Int = 0
     @Published var isCountdownPaused: Bool = false
@@ -942,6 +947,9 @@ final class UniversalPlayerViewModel: ObservableObject {
                         let dur = item.duration.seconds
                         if dur.isFinite { self.duration = dur }
                         self.updateTrackLists()
+                        // Native Up Next: now that duration is known, build and
+                        // publish the content proposal for the AVPlayer route.
+                        Task { [weak self] in await self?.prepareNextContentProposalIfNeeded() }
                     case .failed:
                         let message = item.error?.localizedDescription ?? "Playback failed"
                         print("[Player] AVPlayerItem status: FAILED — \(message)")
@@ -3611,6 +3619,15 @@ final class UniversalPlayerViewModel: ObservableObject {
         // Mark as watched immediately when playback ends/reaches credits
         await markCurrentAsWatched()
 
+        // AVPlayer route with a live native "Up Next" proposal: the native
+        // AVContentProposal banner owns the transition (present + countdown +
+        // auto-accept). Suppress the custom shrink/countdown overlay entirely so
+        // the two don't race into a double-advance.
+        if avContentProposal != nil {
+            postVideoState = .hidden
+            return
+        }
+
         postVideoState = .loading
 
         let isEpisode = metadata.type == "episode"
@@ -3788,6 +3805,127 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Native "Up Next" Content Proposal (AVPlayer route)
+
+    /// Seconds before the end of the current item at which the native banner
+    /// auto-accepts (advances). Reuses the `autoplayCountdown` preference; a
+    /// negative `automaticAcceptanceInterval` is measured from the item's end.
+    private var autoAdvanceTailSeconds: Double {
+        if UserDefaults.standard.object(forKey: "autoplayCountdown") == nil { return 10 }
+        let v = UserDefaults.standard.integer(forKey: "autoplayCountdown")
+        return v > 0 ? Double(v) : 10
+    }
+
+    /// Build and publish a native `AVContentProposal` describing the next episode
+    /// so `NativePlayerViewController` can attach it to the current player item.
+    /// Episode-only, gated on the user's "Up Next" preference. Called once the
+    /// AVPlayer item reaches `readyToPlay` (duration known).
+    func prepareNextContentProposalIfNeeded() async {
+        let isEpisode = metadata.type == "episode"
+        guard isEpisode, showPostVideoUpNext else {
+            avContentProposal = nil
+            return
+        }
+
+        // Resolve the next episode, reusing any value already set to avoid a
+        // double-advance with shuffle. (Explicit if/let — `??` would wrap the
+        // async call in a non-concurrent autoclosure.)
+        let resolved: PlexMetadata?
+        if let existing = nextEpisode {
+            resolved = existing
+        } else {
+            resolved = await fetchNextEpisode()
+        }
+        guard let next = resolved else {
+            print("[UpNext] no next episode — clearing proposal")
+            avContentProposal = nil
+            return
+        }
+        nextEpisode = next
+
+        // Present at the start of credits, else a 45s-from-end heuristic.
+        guard duration > 60 else {
+            print("[UpNext] duration too short/unknown (dur=\(duration)) — skipping proposal")
+            avContentProposal = nil
+            return
+        }
+        let transition: TimeInterval
+        if let credits = metadata.firstCreditsMarker {
+            transition = credits.startTimeSeconds
+        } else {
+            transition = duration - 45
+        }
+
+        let showTitle = next.grandparentTitle ?? next.title ?? "Next Episode"
+        let episodeLine = nextEpisodeLine(for: next)
+        // Full-bleed background of the card = the next episode's still (16:9).
+        let preview = await nextEpisodePreviewImage(for: next)
+
+        let proposal = AVContentProposal(
+            contentTimeForTransition: CMTime(seconds: transition, preferredTimescale: 600),
+            title: showTitle,
+            previewImage: preview
+        )
+        var proposalMetadata: [AVMetadataItem] = [
+            makeMetadataItem(.commonIdentifierDescription, value: episodeLine)
+        ]
+        // Show clearLogo (same series for current + next episode). Fetched raw so
+        // PNG transparency is preserved; the card renders it in place of text.
+        // Stashed in `.commonIdentifierSource` (a valid system identifier — custom
+        // keyspaces are rejected by AVMetadataItem validation).
+        if let logoPath = next.clearLogoPath ?? metadata.clearLogoPath {
+            let logoURL = "\(serverURL)\(logoPath)?X-Plex-Token=\(authToken)"
+            proposalMetadata.append(
+                makeMetadataItem(.commonIdentifierSource, value: logoURL)
+            )
+        }
+        proposal.metadata = proposalMetadata
+        // Negative interval → auto-accept measured from the end of the item.
+        proposal.automaticAcceptanceInterval = -autoAdvanceTailSeconds
+        // url left nil: the delegate's didAccept routes through playNextEpisode()
+        // so Plex headers/markers/progress are preserved.
+
+        avContentProposal = proposal
+        print("[UpNext] published proposal: \"\(showTitle) · \(episodeLine)\" transition=\(Int(transition))s autoAccept=\(proposal.automaticAcceptanceInterval)s")
+    }
+
+    /// "S{season}, E{episode} · {title}" for the card's secondary line
+    /// (matches the Apple TV app's formatting).
+    private func nextEpisodeLine(for ep: PlexMetadata) -> String {
+        if let s = ep.parentIndex, let e = ep.index {
+            let title = ep.title ?? ""
+            return title.isEmpty ? "S\(s), E\(e)" : "S\(s), E\(e) · \(title)"
+        }
+        return ep.title ?? ""
+    }
+
+    /// Fetch a 16:9 still for the next episode to use as the proposal card's
+    /// full-bleed background. Prefers the episode still (`thumb`), then show/season
+    /// art. Returns nil on failure (the card still renders with text only).
+    private func nextEpisodePreviewImage(for ep: PlexMetadata) async -> UIImage? {
+        let path = ep.thumb ?? ep.art ?? ep.grandparentArt ?? ep.parentThumb ?? ep.grandparentThumb
+        guard let path else { return nil }
+        let url = PlexNetworkManager.shared.buildThumbnailURL(
+            serverURL: serverURL,
+            authToken: authToken,
+            thumbPath: path,
+            width: 1920,
+            height: 1080
+        )
+        guard let url else { return nil }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            return UIImage(data: data)
+        } catch {
+            return nil
+        }
+    }
+
+    /// Clears the native proposal (e.g. when the user rejects the banner).
+    func cancelAutoAdvanceProposal() {
+        avContentProposal = nil
+    }
+
     /// Fetch recommendations for movies
     func fetchRecommendations() async -> [PlexMetadata] {
         guard let ratingKey = metadata.ratingKey else { return [] }
@@ -3940,6 +4078,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         introSkipCountdownSeconds = 0
         userDeclinedIntroAutoSkip = false
         nextEpisode = nil
+        // Drop the stale native proposal; a fresh one is published once the new
+        // item reaches readyToPlay.
+        avContentProposal = nil
 
         // Ensure next episode has required metadata for subsequent next-up detection
         if metadata.parentRatingKey == nil || metadata.index == nil {
