@@ -140,12 +140,19 @@ struct PlexMarker: Codable, Identifiable, Sendable {
 struct PlexMetadata: Codable, Identifiable, Hashable, Sendable {
     var id: String {
         // Deterministic identity: must stay stable across SwiftUI body
-        // evaluations. A `UUID()` fallback would mint a fresh id on every
-        // read, so ForEach/sheet(item:)/navigationDestination(item:) would
-        // see the item as replaced each pass. Fall through stable server
-        // fields instead of synthesizing a random id.
-        return ratingKey ?? key ?? guid ?? "plexMetadata"
+        // evaluations. The stored _fallbackID is generated once per instance
+        // so it stays stable across reads, unlike a computed UUID() which
+        // would mint a fresh id every time. Fall through stable server
+        // fields first; only use the per-instance fallback for the
+        // degenerate all-nil case.
+        return ratingKey ?? key ?? guid ?? _fallbackID
     }
+
+    /// Per-instance stable fallback ID. Generated once at init so items
+    /// that lack all server-provided keys still get a unique, stable
+    /// identity in ForEach. Excluded from Codable via CodingKeys and
+    /// from Hashable/Equatable via the existing custom implementations.
+    private let _fallbackID: String = UUID().uuidString
 
     // MARK: - Core Identifiers
     var ratingKey: String?
@@ -244,6 +251,24 @@ struct PlexMetadata: Codable, Identifiable, Hashable, Sendable {
     // MARK: - Additional Metadata
     var hasPremiumPrimaryExtra: String?
     var primaryExtraKey: String?
+
+    // MARK: - CodingKeys (excludes _fallbackID from Codable synthesis)
+    enum CodingKeys: String, CodingKey {
+        case ratingKey, key, guid, type
+        case title, originalTitle, studio, contentRating, summary, tagline, year
+        case rating, audienceRating, ratingImage, audienceRatingImage
+        case thumb, art, banner, Image, Genre, Guid, Collection
+        case duration, originallyAvailableAt, addedAt, updatedAt
+        case librarySectionTitle, librarySectionID, librarySectionKey
+        case parentRatingKey, parentGuid, parentKey, parentTitle, parentIndex, parentThumb
+        case grandparentRatingKey, grandparentGuid, grandparentKey
+        case grandparentTitle, grandparentThumb, grandparentArt, grandparentTheme
+        case index, leafCount, viewedLeafCount, childCount
+        case viewCount, viewOffset, lastViewedAt, skipCount
+        case userRating, lastRatedAt
+        case Media, Role, Director, Writer, Extras, Marker, Chapter, OnDeck
+        case hasPremiumPrimaryExtra, primaryExtraKey
+    }
 
     // MARK: - Hashable
     func hash(into hasher: inout Hasher) {

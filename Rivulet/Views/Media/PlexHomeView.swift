@@ -1197,9 +1197,12 @@ struct InfiniteContentRow: View {
     @State private var totalSize: Int?
     @FocusState private var focusedItemId: String?  // Track which item is focused (format: "context:itemId")
 
-    /// Create a unique focus ID for an item in this row
-    private func focusId(for item: PlexMetadata) -> String {
-        focusId(forItemID: sourceItemID(for: item))
+    /// Create a unique focus ID for an item in this row.
+    /// Pass the enumeration `index` when available (inside ForEach) so
+    /// keyless items get distinct IDs instead of all collapsing to the
+    /// same "unknown" suffix.
+    private func focusId(for item: PlexMetadata, index: Int? = nil) -> String {
+        focusId(forItemID: sourceItemID(for: item, index: index))
     }
 
     private func focusId(forItemID itemID: String) -> String {
@@ -1298,7 +1301,7 @@ struct InfiniteContentRow: View {
                                     item: item,
                                     serverURL: serverURL,
                                     authToken: authToken,
-                                    isFocused: focusedItemId == focusId(for: item)
+                                    isFocused: focusedItemId == focusId(for: item, index: index)
                                 )
                             } else if cardStyle == .poster {
                                 MediaPosterCard(
@@ -1313,13 +1316,13 @@ struct InfiniteContentRow: View {
                                     model: PlexContentCardMapper.model(
                                         from: item, serverURL: serverURL, authToken: authToken
                                     ),
-                                    isFocused: focusedItemId == focusId(for: item)
+                                    isFocused: focusedItemId == focusId(for: item, index: index)
                                 )
                             }
                         }
                         .previewSourceAnchor(rowID: rowID, itemID: sourceItemID(for: item, index: index))
                         .buttonStyle(CardButtonStyle())
-                        .focused($focusedItemId, equals: focusId(for: item))
+                        .focused($focusedItemId, equals: focusId(for: item, index: index))
                         .modifier(ContinueWatchingContextMenuModifier(
                             item: item,
                             serverURL: serverURL,
@@ -1370,7 +1373,7 @@ struct InfiniteContentRow: View {
             // marking watched), but only when the previously-focused item still
             // exists — never strand focus on a vanished item (E2-PR3). Compares
             // full focus identities so rowIDs containing ":" are handled safely.
-            let validFocusIDs = Set(items.map { focusId(for: $0) })
+            let validFocusIDs = Set(items.enumerated().map { focusId(for: $0.element, index: $0.offset) })
             if let restore = FocusRestorationPolicy.restoredFocusID(saved: savedFocusId, validFocusIDs: validFocusIDs) {
                 // Must nil first then restore async — SwiftUI ignores setting the same value
                 focusedItemId = nil

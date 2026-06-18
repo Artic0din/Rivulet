@@ -202,11 +202,18 @@ struct PlexExtrasContainerWrapper: Codable, Sendable {
 
 struct PlexHub: Codable, Identifiable, Sendable {
     // Deterministic identity: must stay stable across SwiftUI body
-    // evaluations. A `UUID()` fallback would mint a fresh id on every read,
-    // making ForEach treat the hub as removed-and-reinserted (lost focus/
-    // scroll state, broken animations). Fall through stable server fields
-    // instead and only land on a constant for the degenerate all-nil case.
-    var id: String { hubIdentifier ?? key ?? hubKey ?? title ?? "plexHub" }
+    // evaluations. The stored _fallbackID is generated once per instance
+    // so it stays stable across reads, unlike a computed UUID() which
+    // would mint a fresh id every time. Fall through stable server fields
+    // first; only use the per-instance fallback for the degenerate all-nil
+    // case.
+    var id: String { hubIdentifier ?? key ?? hubKey ?? title ?? _fallbackID }
+
+    /// Per-instance stable fallback ID. Generated once at init so hubs
+    /// that lack all server-provided keys still get a unique, stable
+    /// identity in ForEach. Excluded from Codable via CodingKeys.
+    private let _fallbackID: String = UUID().uuidString
+
     var hubIdentifier: String?
     var title: String?
     var type: String?
@@ -215,6 +222,11 @@ struct PlexHub: Codable, Identifiable, Sendable {
     var more: Bool?
     var size: Int?
     var Metadata: [PlexMetadata]?
+
+    // MARK: - CodingKeys (excludes _fallbackID from Codable synthesis)
+    enum CodingKeys: String, CodingKey {
+        case hubIdentifier, title, type, hubKey, key, more, size, Metadata
+    }
 
     init(
         hubIdentifier: String? = nil,
