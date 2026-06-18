@@ -102,6 +102,25 @@ struct PlexHomeView: View {
         }
     }
 
+    /// Lightweight fingerprint of hub content for change detection. Includes
+    /// hub count, identifiers, and first-item rating keys so that same-count
+    /// mutations (e.g. watch progress replacing an item in Continue Watching)
+    /// are detected without comparing every field.
+    private var hubContentFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(dataStore.hubs.count)
+        for hub in dataStore.hubs {
+            hasher.combine(hub.hubIdentifier)
+            if let items = hub.Metadata {
+                hasher.combine(items.count)
+                // First and last item keys capture insertions/removals/reorders
+                hasher.combine(items.first?.ratingKey)
+                hasher.combine(items.last?.ratingKey)
+            }
+        }
+        return hasher.finalize()
+    }
+
     /// Resolved render state for the credentialed Home path. Not-connected is
     /// handled separately below (auth is an Epic 1 boundary) and is intentionally
     /// not part of this content render-state model.
@@ -147,9 +166,11 @@ struct PlexHomeView: View {
                 if homeRenderState.phase == .loading {
                     HomePerformance.tracer.beginHomeDataLoad()
                 }
-                // processedHubs is maintained by the store (recomputed in its
-                // didSet as hub/library data lands), so there's nothing to seed
-                // here. Only select hero if we don't have one yet.
+                // Recompute processedHubs on every appear so that library
+                // visibility changes made while Home was unmounted (e.g. in
+                // Settings) are reflected immediately. The recompute is cheap
+                // (no network) and idempotent when inputs haven't changed.
+                dataStore.recomputeProcessedHubs()
                 if heroItems.isEmpty {
                     selectHeroItems()
                 }
@@ -181,9 +202,11 @@ struct PlexHomeView: View {
                     HomePerformance.tracer.endHomeDataLoad()
                 }
             }
-            .onChange(of: dataStore.hubs.count) { _, _ in
-                // Refresh hero when the hub set gains/loses content (first load,
-                // sign-out). processedHubs itself is recomputed by the store.
+            .onChange(of: hubContentFingerprint) { _, _ in
+                // Refresh hero when hub content changes (first load, watch
+                // progress updates, sign-out). Keyed on a lightweight
+                // fingerprint of hub IDs + first-item keys so same-count
+                // content mutations (e.g. viewOffset changes) are detected.
                 selectHeroItems()
             }
             .onChange(of: dataStore.librarySettings.librariesShownOnHome) { _, _ in

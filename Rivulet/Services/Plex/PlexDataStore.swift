@@ -375,13 +375,18 @@ final class PlexDataStore {
         clearFreshnessTimestamps()
         fullMetadataCache.removeAll()
 
-        // Clear in-memory data (libraries may differ per user). Each
-        // assignment triggers recomputeProcessedHubs via didSet, which also
-        // resets isHomeContentReady to false once processedHubs empties.
+        // Clear in-memory data (libraries may differ per user). Clear
+        // continueWatchingHub and processedHubs explicitly — relying on
+        // didSet cascades alone would leave stale data visible until the
+        // final assignment lands, leaking the previous user's Continue
+        // Watching into the new profile's Home.
         hubs = []
         libraries = []
+        continueWatchingHub = nil
         hasLoadedLibraries = false
         libraryHubs.removeAll()
+        processedHubs = []
+        isHomeContentReady = false
 
         // Clear on-deck/continue watching cache
         await cacheManager.clearOnDeckCache()
@@ -1155,6 +1160,9 @@ final class PlexDataStore {
         prefetchTask = nil
         hubs = []
         libraries = []
+        continueWatchingHub = nil
+        libraryHubs.removeAll()
+        processedHubs = []
         isHomeContentReady = false
         hubsError = nil
         librariesError = nil
