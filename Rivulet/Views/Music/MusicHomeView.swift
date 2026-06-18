@@ -42,7 +42,7 @@ struct MusicHomeView: View {
     @Environment(MusicProviderRegistry.self) private var registry
 
     @ObservedObject private var authManager = PlexAuthManager.shared
-    @ObservedObject private var dataStore = PlexDataStore.shared
+    private let dataStore = PlexDataStore.shared
     @ObservedObject private var musicQueue = MusicQueue.shared
 
     @State private var recentlyAddedItems: [MusicAlbum] = []

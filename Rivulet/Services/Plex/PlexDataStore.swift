@@ -6,49 +6,61 @@
 //
 
 import Foundation
-import Combine
 import UIKit
 import os
 
 private let topShelfDataLog = Logger(subsystem: "com.rivulet.app", category: "TopShelf")
 
 @MainActor
-class PlexDataStore: ObservableObject {
+@Observable
+final class PlexDataStore {
     static let shared = PlexDataStore()
 
-    // MARK: - Published State
+    // MARK: - Observed State
 
-    @Published var hubs: [PlexHub] = []
+    /// The global `/hubs` response. Not an input to `processedHubs` (Home's
+    /// Continue Watching row comes from `continueWatchingHub` and its other
+    /// rows from `libraryHubs`), so it deliberately has no recompute didSet —
+    /// `@Observable` still tracks reads of it (e.g. the hub-backed hero).
+    var hubs: [PlexHub] = []
     /// Continue Watching hub fetched from Plex's dedicated `/hubs/continueWatching`
     /// endpoint — matches what Plex's own apps display (respects user dismissals and
     /// library exclusion settings). Nil until first fetch completes.
-    @Published var continueWatchingHub: PlexHub?
-    @Published var libraries: [PlexLibrary] = []
-    @Published var isLoadingHubs = false
-    @Published var isLoadingLibraries = false
-    @Published var hubsError: String?
-    @Published var librariesError: String?
-    @Published private(set) var hasLoadedLibraries = false
+    var continueWatchingHub: PlexHub? {
+        didSet { recomputeProcessedHubs() }
+    }
+    var libraries: [PlexLibrary] = [] {
+        didSet { recomputeProcessedHubs() }
+    }
+    var isLoadingHubs = false
+    var isLoadingLibraries = false
+    var hubsError: String?
+    var librariesError: String?
+    private(set) var hasLoadedLibraries = false
 
     /// Per-library hubs for Home screen (keyed by library key)
-    @Published var libraryHubs: [String: [PlexHub]] = [:]
-    @Published var isLoadingLibraryHubs = false
+    var libraryHubs: [String: [PlexHub]] = [:] {
+        didSet { recomputeProcessedHubs() }
+    }
+    var isLoadingLibraryHubs = false
 
-    /// Increments whenever hubs content changes (not just count)
-    /// Views should watch this to trigger UI updates when items change
-    @Published private(set) var hubsVersion: UUID = UUID()
+    /// Home content rows, derived from `continueWatchingHub` + per-library
+    /// "Recently Added" hubs and ordered by `HomeRowOrderingPolicy`. Cached
+    /// (recomputed only when its inputs change) rather than computed per body
+    /// evaluation — PlexHomeView's body re-runs on every scroll frame, so an
+    /// inline merge would re-run the whole derivation each frame. Replaces the
+    /// former `hubsVersion`/`libraryHubsVersion` invalidation signals, which
+    /// existed only to drive a view-side cache under ObservableObject.
+    private(set) var processedHubs: [PlexHub] = []
 
-    /// Increments when library hubs content changes
-    @Published private(set) var libraryHubsVersion: UUID = UUID()
-
-    /// Set by PlexHomeView when processed hubs are ready to display
-    @Published var isHomeContentReady = false
+    /// True once `processedHubs` has content ready to display.
+    private(set) var isHomeContentReady = false
 
     // MARK: - Freshness Tracking
 
     /// Timestamps of last successful network fetch, keyed by resource identifier
     /// e.g. "libraryItems:/library/sections/1", "libraryHubs:/library/sections/1"
-    private var lastFetchTimestamps: [String: Date] = [:]
+    @ObservationIgnored private var lastFetchTimestamps: [String: Date] = [:]
 
     /// Record that a resource was just fetched from the network
     func recordFetch(for key: String) {
@@ -69,7 +81,7 @@ class PlexDataStore: ObservableObject {
     // MARK: - Full Metadata Cache (stale-while-revalidate)
 
     /// Cached full metadata responses keyed by ratingKey, with fetch timestamp
-    private var fullMetadataCache: [String: (metadata: PlexMetadata, fetchedAt: Date)] = [:]
+    @ObservationIgnored private var fullMetadataCache: [String: (metadata: PlexMetadata, fetchedAt: Date)] = [:]
     private let fullMetadataCacheLimit = 50
 
     /// Get cached full metadata for a ratingKey (returns nil if not cached)
@@ -98,7 +110,7 @@ class PlexDataStore: ObservableObject {
 
     /// Cached hero items per library key - persists across navigation.
     /// Keys: "home" for the home screen, each library key for library-scoped carousels.
-    private var heroItemsCache: [String: [PlexMetadata]] = [:]
+    @ObservationIgnored private var heroItemsCache: [String: [PlexMetadata]] = [:]
 
     /// Get cached hero items for a library (returns nil if not cached)
     func getCachedHeroItems(forLibrary libraryKey: String) -> [PlexMetadata]? {
@@ -156,26 +168,64 @@ class PlexDataStore: ObservableObject {
         visibleMediaLibraries.filter { librarySettings.isLibraryShownOnHome($0.key) }
     }
 
+    // MARK: - Processed Home Rows
+
+    /// Rebuild `processedHubs` from the current hub/library state. Continue
+    /// Watching is pinned first (E2-PR5); each Home-visible library contributes
+    /// its "Recently Added" hub, re-titled with the library name. Music
+    /// libraries are skipped while the Music feature is hidden.
+    ///
+    /// Called from the `didSet` of `hubs`, `libraryHubs`, `continueWatchingHub`,
+    /// and `libraries`, and explicitly when the Home library selection changes
+    /// (that input lives on `librarySettings`, a separate object).
+    func recomputeProcessedHubs() {
+        var followingRows: [PlexHub] = []
+        for library in librariesForHomeScreen {
+            if !FeatureFlags.musicEnabled && library.isMusicLibrary {
+                continue
+            }
+            if let hubs = libraryHubs[library.key],
+               let recentlyAddedHub = hubs.first(where: { Self.isRecentlyAddedHub($0) }) {
+                var transformedHub = recentlyAddedHub
+                transformedHub.title = "Recently Added \(library.title)"
+                followingRows.append(transformedHub)
+            }
+        }
+
+        processedHubs = HomeRowOrderingPolicy.order(
+            continueWatching: continueWatchingHub,
+            followingRows: followingRows
+        )
+        isHomeContentReady = !processedHubs.isEmpty
+    }
+
+    /// Whether a hub is a "Recently Added" hub (by identifier or title).
+    private static func isRecentlyAddedHub(_ hub: PlexHub) -> Bool {
+        let identifier = hub.hubIdentifier?.lowercased() ?? ""
+        let title = hub.title?.lowercased() ?? ""
+        return identifier.contains("recentlyadded") || title.contains("recently added")
+    }
+
     // Track if initial load has been attempted
-    private var hubsLoadTask: Task<Void, Never>?
-    private var librariesLoadTask: Task<Void, Never>?
-    private var libraryHubsLoadTask: Task<Void, Never>?
+    @ObservationIgnored private var hubsLoadTask: Task<Void, Never>?
+    @ObservationIgnored private var librariesLoadTask: Task<Void, Never>?
+    @ObservationIgnored private var libraryHubsLoadTask: Task<Void, Never>?
 
     /// Track whether we've already attempted connection recovery this session
     /// Reset on successful fetch
-    private var hasAttemptedConnectionRecovery = false
+    @ObservationIgnored private var hasAttemptedConnectionRecovery = false
 
     // MARK: - Background Polling
 
     /// Timer for periodic hub refresh (3 minutes)
-    private var pollingTimer: Timer?
+    @ObservationIgnored private var pollingTimer: Timer?
     private let pollingInterval: TimeInterval = 180 // 3 minutes
 
     /// Track if playback is active (pause polling during playback)
-    private var isPlaybackActive = false
+    @ObservationIgnored private var isPlaybackActive = false
 
     /// Track if app is in foreground
-    private var isInForeground = true
+    @ObservationIgnored private var isInForeground = true
 
     private init() {
         setupPollingObservers()
@@ -325,13 +375,17 @@ class PlexDataStore: ObservableObject {
         clearFreshnessTimestamps()
         fullMetadataCache.removeAll()
 
-        // Clear in-memory data (libraries may differ per user)
+        // Clear in-memory data (libraries may differ per user). Clear
+        // continueWatchingHub and processedHubs explicitly — relying on
+        // didSet cascades alone would leave stale data visible until the
+        // final assignment lands, leaking the previous user's Continue
+        // Watching into the new profile's Home.
         hubs = []
         libraries = []
+        continueWatchingHub = nil
         hasLoadedLibraries = false
         libraryHubs.removeAll()
-        hubsVersion = UUID()
-        libraryHubsVersion = UUID()
+        processedHubs = []
         isHomeContentReady = false
 
         // Clear on-deck/continue watching cache
@@ -380,7 +434,6 @@ class PlexDataStore: ObservableObject {
             if let cached = await cacheManager.getCachedHubs(), !cached.isEmpty {
                 await MainActor.run {
                     self.hubs = cached
-                    self.hubsVersion = UUID()
                     self.isLoadingHubs = false
                 }
                 // Background refresh
@@ -406,16 +459,15 @@ class PlexDataStore: ObservableObject {
             // Reset recovery flag on success
             hasAttemptedConnectionRecovery = false
 
-            // Only update if hubs actually changed (prevents unnecessary re-renders)
+            // Only update if hubs actually changed. The didSet on each property
+            // drives recomputeProcessedHubs; guarding on equality avoids a
+            // redundant recompute when the fetch returned identical content.
             if !hubsAreEqual(self.hubs, fetchedHubs) {
                 self.hubs = fetchedHubs
-                self.hubsVersion = UUID()  // Signal that content changed
-            } else {
             }
 
             if !continueWatchingHubsAreEqual(self.continueWatchingHub, fetchedContinueWatching) {
                 self.continueWatchingHub = fetchedContinueWatching
-                self.hubsVersion = UUID()
             }
 
             // Update Top Shelf cache after fetching. Runs off the hub-refresh
@@ -512,9 +564,10 @@ class PlexDataStore: ObservableObject {
                 }
             }
 
-            // If cache provided some data, update UI immediately
+            // If cache provided some data, update UI immediately. The
+            // libraryHubs[key] = cached assignments above already drove the
+            // recompute via didSet.
             if librariesNeedingFetch.count < missingLibraries.count {
-                libraryHubsVersion = UUID()
                 isLoadingLibraryHubs = false
             }
 
@@ -581,7 +634,6 @@ class PlexDataStore: ObservableObject {
                 }
             }
 
-            libraryHubsVersion = UUID()
             isLoadingLibraryHubs = false
         }
 
@@ -755,8 +807,9 @@ class PlexDataStore: ObservableObject {
             }
         }
 
-        var didUpdateHubs = false
-        // Update in global hubs (Continue Watching lives here)
+        // Update in global hubs (Continue Watching lives here). Mutating an
+        // element re-assigns the `hubs` array, which @Observable tracks, so
+        // views reading `hubs` refresh without any explicit version signal.
         for hubIndex in hubs.indices {
             guard var metadata = hubs[hubIndex].Metadata else { continue }
             var hubChanged = false
@@ -766,12 +819,11 @@ class PlexDataStore: ObservableObject {
             }
             if hubChanged {
                 hubs[hubIndex].Metadata = metadata
-                didUpdateHubs = true
             }
         }
 
-        var didUpdateLibraryHubs = false
-        // Update in per-library hubs (Recently Added <Library> rows live here)
+        // Update in per-library hubs (Recently Added <Library> rows live here).
+        // Assigning libraryHubs[key] triggers recomputeProcessedHubs via didSet.
         for (libraryKey, hubList) in libraryHubs {
             var updatedHubList = hubList
             var libraryChanged = false
@@ -789,22 +841,13 @@ class PlexDataStore: ObservableObject {
             }
             if libraryChanged {
                 libraryHubs[libraryKey] = updatedHubList
-                didUpdateLibraryHubs = true
             }
-        }
-
-        // Bump versions so views recompute their derived state
-        if didUpdateHubs {
-            hubsVersion = UUID()
-        }
-        if didUpdateLibraryHubs {
-            libraryHubsVersion = UUID()
         }
     }
 
     // MARK: - Background Prefetch
 
-    private var prefetchTask: Task<Void, Never>?
+    @ObservationIgnored private var prefetchTask: Task<Void, Never>?
 
     /// Prefetch library content in the background for faster navigation
     /// Call this on app start after authentication is verified
@@ -964,7 +1007,7 @@ class PlexDataStore: ObservableObject {
     // MARK: - Next Episode Prefetching
 
     /// Cache for prefetched next episodes (keyed by current episode ratingKey)
-    private(set) var nextEpisodeCache: [String: PlexMetadata] = [:]
+    @ObservationIgnored private(set) var nextEpisodeCache: [String: PlexMetadata] = [:]
 
     /// Prefetch next episodes for Continue Watching items
     private func prefetchNextEpisodes(for episodes: [PlexMetadata], serverURL: String, token: String) async {
@@ -1117,6 +1160,9 @@ class PlexDataStore: ObservableObject {
         prefetchTask = nil
         hubs = []
         libraries = []
+        continueWatchingHub = nil
+        libraryHubs.removeAll()
+        processedHubs = []
         isHomeContentReady = false
         hubsError = nil
         librariesError = nil
